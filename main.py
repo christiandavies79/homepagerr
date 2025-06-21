@@ -139,6 +139,8 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
 
 # In main.py
 
+# In main.py - Replace the entire DEFAULT_JS variable with this
+
 DEFAULT_JS = """
 document.addEventListener('DOMContentLoaded', () => {
     // --- Global State ---
@@ -161,15 +163,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const linkColumnsInput = document.getElementById('link-columns-input');
     const overwriteStaticCheckbox = document.getElementById('overwrite-static-checkbox');
     
-
     // --- Data Fetching ---
-    const fetchAllData = async () => {
+    const fetchAllData = async (retries = 5, delay = 500) => {
+        // Helper function to add a timeout to fetch requests
+        const fetchWithTimeout = (resource, options = {}, timeout = 4000) => {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+
+            const response = fetch(resource, {
+                ...options,
+                signal: controller.signal  
+            });
+
+            // Clear the timeout if the fetch completes or fails, preventing memory leaks
+            response.finally(() => clearTimeout(id));
+
+            return response;
+        };
+
         try {
+            // Use the new timeout wrapper for our API calls
             const [linksResponse, settingsResponse] = await Promise.all([
-                fetch('/api/links'),
-                fetch('/api/settings')
+                fetchWithTimeout('/api/links'),
+                fetchWithTimeout('/api/settings')
             ]);
-            if (!linksResponse.ok || !settingsResponse.ok) throw new Error('Network response was not ok');
+            
+            if (!linksResponse.ok || !settingsResponse.ok) {
+                throw new Error(`Server returned an error. Status - Links: ${linksResponse.status}, Settings: ${settingsResponse.status}`);
+            }
+
             currentLinks = await linksResponse.json();
             currentSettings = await settingsResponse.json();
             
@@ -177,7 +199,15 @@ document.addEventListener('DOMContentLoaded', () => {
             renderLinks();
 
         } catch (error) {
-            linksContainer.innerHTML = `<p style="color:red;">Error loading data: ${error.message}</p>`;
+            // If we have retries left, schedule another attempt
+            if (retries > 0) {
+                console.warn(`Data fetch failed: ${error.message}. Retrying in ${delay}ms... (${retries - 1} retries left)`);
+                setTimeout(() => fetchAllData(retries - 1, delay), delay);
+            } else {
+                // If all retries fail, show a final error message.
+                console.error('Error loading data after multiple retries:', error);
+                linksContainer.innerHTML = `<p style="color:red;">Error loading data: The server might be offline or starting up. Please try refreshing the page in a moment.</p>`;
+            }
         }
     };
 
@@ -232,9 +262,6 @@ document.addEventListener('DOMContentLoaded', () => {
              addSectionBtn.className = 'add-btn add-section-btn';
              linksContainer.appendChild(addSectionBtn);
         }
-        
-        // ---- CHANGE #1: The line below has been removed from this function ----
-        // addDynamicEventListeners(); 
     };
     
     // --- Edit Mode Logic ---
@@ -335,7 +362,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // ---- CHANGE #2: The function call is now here, so it only runs once. ----
     addDynamicEventListeners();
 
     editButton.addEventListener('click', toggleEditMode);
@@ -347,9 +373,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === settingsModal) closeSettingsModal();
     });
 
+    // --- Initial Load ---
     fetchAllData();
 });
 """
+
 
 DEFAULT_LINKS = {
     "sections": [
