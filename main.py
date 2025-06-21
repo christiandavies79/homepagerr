@@ -294,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentLinks = { sections }; // Update local state
             toggleEditMode(); // Exit edit mode
         } catch (error) {
-            alert(`Error saving links: ${error.message}`);
+            console.error('Error saving links:', error);
         }
     };
 
@@ -326,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderLinks(); // Re-render links to apply new tab setting
             closeSettingsModal();
         } catch (error) {
-            alert(`Error saving settings: ${error.message}`);
+            console.error('Error saving settings:', error);
         }
     };
 
