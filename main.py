@@ -36,6 +36,45 @@ DEFAULT_HTML = """
         </main>
     </div>
 
+    <!-- Drag Overlay -->
+    <div id="drag-overlay" class="hidden">
+        <div class="drag-overlay-content">
+            <h2>Drop Link Here</h2>
+        </div>
+    </div>
+
+    <!-- Add Link Modal (for drag & drop) -->
+    <div id="add-link-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Add New Link</h2>
+            <form id="add-link-form">
+                <div class="form-group">
+                    <label for="link-name-input">Link Name</label>
+                    <input type="text" id="link-name-input" required>
+                </div>
+                <div class="form-group">
+                    <label for="link-url-input">Link URL</label>
+                    <input type="text" id="link-url-input" required readonly>
+                </div>
+                <div class="form-group">
+                    <label for="link-section-select">Section</label>
+                    <select id="link-section-select">
+                        <!-- Options will be populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group hidden" id="new-section-group">
+                    <label for="new-section-title-input">New Section Title</label>
+                    <input type="text" id="new-section-title-input">
+                </div>
+            </form>
+            <div class="modal-actions">
+                <button id="cancel-add-link-button">Cancel</button>
+                <button id="save-add-link-button">Save Link</button>
+            </div>
+        </div>
+    </div>
+
+
     <!-- Settings Modal -->
     <div id="settings-modal" class="modal-overlay">
         <div class="modal-content">
@@ -129,13 +168,36 @@ header h1 { margin: 0; font-size: 1.8rem; }
 .modal-content h2 { margin-top: 0; color: #00aaff;}
 .form-group { margin-bottom: 1rem; }
 .form-group label { display: block; margin-bottom: 0.5rem; }
-.form-group input[type="text"], .form-group input[type="number"] { width: calc(100% - 1rem); background-color: #333; border: 1px solid #555; color: #eee; padding: 0.5rem; border-radius: 4px;}
-.form-group input[type="checkbox"] { margin-right: 0.5rem; }
+.form-group input[type="text"], .form-group input[type="number"], .form-group select { width: 100%; background-color: #333; border: 1px solid #555; color: #eee; padding: 0.5rem; border-radius: 4px;}
+.form-group input[type="checkbox"] { margin-right: 0.5rem; width: auto; }
 .modal-actions { margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem; }
 .modal-actions button { background-color: #6c757d; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 5px; cursor: pointer; }
-.modal-actions button#save-settings-button { background-color: #007bff; }
+.modal-actions button#save-settings-button, .modal-actions button#save-add-link-button { background-color: #007bff; }
 hr { border: 1px solid #444; margin: 1.5rem 0;}
 .warning-text { color: #ffc107; }
+
+/* Drag Overlay Styles */
+#drag-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 170, 255, 0.2);
+    border: 3px dashed #00aaff;
+    box-sizing: border-box;
+    z-index: 2000; /* Must be on top of everything */
+}
+#drag-overlay .drag-overlay-content {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    font-size: 2rem;
+    color: #e0e0e0;
+    text-shadow: 0 0 10px #121212;
+}
 """
 
 DEFAULT_JS = """
@@ -153,6 +215,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const discardButton = document.getElementById('discard-button');
     const linksContainer = document.getElementById('links-container');
     const settingsButton = document.getElementById('settings-button');
+    
+    // Settings Modal
     const settingsModal = document.getElementById('settings-modal');
     const saveSettingsButton = document.getElementById('save-settings-button');
     const cancelSettingsButton = document.getElementById('cancel-settings-button');
@@ -160,6 +224,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const newTabCheckbox = document.getElementById('new-tab-checkbox');
     const linkColumnsInput = document.getElementById('link-columns-input');
     const overwriteStaticCheckbox = document.getElementById('overwrite-static-checkbox');
+
+    // Drag and Drop Modal
+    const addLinkModal = document.getElementById('add-link-modal');
+    const dragOverlay = document.getElementById('drag-overlay');
+    const addLinkForm = document.getElementById('add-link-form');
+    const linkNameInput = document.getElementById('link-name-input');
+    const linkUrlInput = document.getElementById('link-url-input');
+    const linkSectionSelect = document.getElementById('link-section-select');
+    const newSectionGroup = document.getElementById('new-section-group');
+    const newSectionTitleInput = document.getElementById('new-section-title-input');
+    const saveAddLinkButton = document.getElementById('save-add-link-button');
+    const cancelAddLinkButton = document.getElementById('cancel-add-link-button');
     
 
     // --- Data Fetching ---
@@ -245,7 +321,27 @@ document.addEventListener('DOMContentLoaded', () => {
         renderLinks();
     };
 
-    const saveLinkChanges = async () => {
+    const saveAllLinkChanges = async (newLinkData) => {
+        try {
+            const response = await fetch('/api/links', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newLinkData)
+            });
+            if (!response.ok) throw new Error('Failed to save link changes');
+            currentLinks = newLinkData;
+            if (isEditMode) {
+                toggleEditMode();
+            } else {
+                renderLinks();
+            }
+        } catch (error) {
+            console.error('Error saving links:', error);
+        }
+    };
+
+    // --- Save button from Edit Mode ---
+    const saveLinkChangesFromEditMode = () => {
         const sections = [];
         document.querySelectorAll('.section').forEach(sectionDiv => {
             const titleInput = sectionDiv.querySelector('.section-title-input');
@@ -261,19 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             sections.push(newSection);
         });
-
-        try {
-            const response = await fetch('/api/links', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sections })
-            });
-            if (!response.ok) throw new Error('Failed to save link changes');
-            currentLinks = { sections };
-            toggleEditMode();
-        } catch (error) {
-            console.error('Error saving links:', error);
-        }
+        saveAllLinkChanges({ sections });
     };
 
     // --- Settings Modal Logic ---
@@ -311,6 +395,62 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error saving settings:', error);
         }
     };
+    
+    // --- Drag and Drop Modal Logic ---
+    const openAddLinkModal = (url) => {
+        addLinkForm.reset();
+        newSectionGroup.classList.add('hidden');
+        linkUrlInput.value = url;
+        linkNameInput.value = url.replace(/(^\w+:|^)\/\//, '').replace(/^www\./, ''); // Smart default name
+        
+        // Populate sections
+        linkSectionSelect.innerHTML = '';
+        currentLinks.sections.forEach((section, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = section.title;
+            linkSectionSelect.appendChild(option);
+        });
+        const newSectionOption = document.createElement('option');
+        newSectionOption.value = '--new-section--';
+        newSectionOption.textContent = 'Create a new section...';
+        linkSectionSelect.appendChild(newSectionOption);
+
+        addLinkModal.classList.add('visible');
+    };
+
+    const closeAddLinkModal = () => {
+        addLinkModal.classList.remove('visible');
+    };
+
+    const saveLinkFromModal = () => {
+        const name = linkNameInput.value.trim();
+        const url = linkUrlInput.value.trim();
+        const sectionChoice = linkSectionSelect.value;
+        const newSectionTitle = newSectionTitleInput.value.trim();
+
+        if (!name || !url) {
+            alert('Link Name and URL cannot be empty.');
+            return;
+        }
+
+        const newLink = { name, url };
+        let updatedLinks = JSON.parse(JSON.stringify(currentLinks)); // Deep copy
+
+        if (sectionChoice === '--new-section--') {
+            if (!newSectionTitle) {
+                alert('New section title cannot be empty.');
+                return;
+            }
+            updatedLinks.sections.push({ title: newSectionTitle, links: [newLink] });
+        } else {
+            const sectionIndex = parseInt(sectionChoice, 10);
+            updatedLinks.sections[sectionIndex].links.push(newLink);
+        }
+
+        saveAllLinkChanges(updatedLinks);
+        closeAddLinkModal();
+    };
 
     // --- Event Listeners ---
     function addDynamicEventListeners() {
@@ -333,11 +473,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // --- Static Event Listeners Setup ---
     addDynamicEventListeners();
 
     editButton.addEventListener('click', toggleEditMode);
-    saveButton.addEventListener('click', saveLinkChanges);
-    discardButton.addEventListener('click', toggleEditMode); // Discard just needs to toggle the mode
+    saveButton.addEventListener('click', saveLinkChangesFromEditMode);
+    discardButton.addEventListener('click', toggleEditMode);
+    
     settingsButton.addEventListener('click', openSettingsModal);
     cancelSettingsButton.addEventListener('click', closeSettingsModal);
     saveSettingsButton.addEventListener('click', saveSettingsChanges);
@@ -345,6 +487,59 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === settingsModal) closeSettingsModal();
     });
 
+    // --- Drag and Drop Listeners ---
+    let dragCounter = 0;
+    window.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        const isLink = e.dataTransfer.types.includes('text/uri-list') || e.dataTransfer.types.includes('text/plain');
+        if (isLink) {
+            dragCounter++;
+            dragOverlay.classList.remove('hidden');
+        }
+    });
+
+    window.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter === 0) {
+            dragOverlay.classList.add('hidden');
+        }
+    });
+
+    window.addEventListener('dragover', (e) => {
+        e.preventDefault(); // This is necessary to allow a drop
+    });
+
+    window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        dragOverlay.classList.add('hidden');
+
+        const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+        const urlRegex = /^(https?:\\/\\/)?([\\da-z\\.-]+)\\.([a-z\\.]{2,6})([\\/\\w \\.-]*)*\\/?$/;
+        
+        if (url && urlRegex.test(url)) {
+            openAddLinkModal(url);
+        } else {
+            console.warn('Dropped item is not a valid URL:', url);
+        }
+    });
+
+    // Add Link Modal Listeners
+    linkSectionSelect.addEventListener('change', () => {
+        if (linkSectionSelect.value === '--new-section--') {
+            newSectionGroup.classList.remove('hidden');
+        } else {
+            newSectionGroup.classList.add('hidden');
+        }
+    });
+    cancelAddLinkButton.addEventListener('click', closeAddLinkModal);
+    saveAddLinkButton.addEventListener('click', saveLinkFromModal);
+    addLinkModal.addEventListener('click', (e) => {
+        if (e.target === addLinkModal) closeAddLinkModal();
+    });
+
+    // --- Initial Load ---
     fetchAllData();
 });
 """
