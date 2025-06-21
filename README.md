@@ -1,3 +1,7 @@
+G'day. Of course. Here is the raw text for the `README.md` file.
+
+You can copy and paste this directly into a `README.md` file in your project's root directory.
+
 ```markdown
 # Homepagerr - A Simple, Self-Hosted Dashboard
 
