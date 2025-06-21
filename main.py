@@ -1,9 +1,9 @@
 import os
 import json
+import shutil
 from flask import Flask, send_from_directory, request, jsonify
 
 # --- Configuration ---
-# The single volume you mount from your host (e.g., Unraid appdata)
 CONFIG_DIR = '/app/config'
 DATA_DIR = os.path.join(CONFIG_DIR, 'data')
 STATIC_DIR = os.path.join(CONFIG_DIR, 'static')
@@ -17,13 +17,13 @@ DEFAULT_HTML = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Homepage</title> <!-- Title will be set by JS -->
+    <title>Homepage</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1 id="page-title">My Homepage</h1> <!-- Title will be set by JS -->
+            <h1 id="page-title">My Homepage</h1>
             <div class="controls">
                 <button id="settings-button">Settings</button>
                 <button id="edit-button">Edit Links</button>
@@ -36,7 +36,7 @@ DEFAULT_HTML = """
     </div>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="modal-overlay"> <!-- Removed 'hidden' class -->
+    <div id="settings-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Settings</h2>
             <form id="settings-form">
@@ -45,9 +45,20 @@ DEFAULT_HTML = """
                     <input type="text" id="page-title-input" name="pageTitle">
                 </div>
                 <div class="form-group">
+                    <label for="link-columns-input">Link Columns</label>
+                    <input type="number" id="link-columns-input" name="linkColumns" min="1" max="6" value="2">
+                </div>
+                <div class="form-group">
                     <label>
                         <input type="checkbox" id="new-tab-checkbox" name="openLinksInNewTab">
                         Open links in a new tab
+                    </label>
+                </div>
+                <hr>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="overwrite-static-checkbox" name="forceOverwriteStaticFiles">
+                        <span class="warning-text">Force overwrite static files on next restart (for testing)</span>
                     </label>
                 </div>
             </form>
@@ -84,56 +95,25 @@ header {
     padding-bottom: 1rem;
     margin-bottom: 2rem;
 }
-header h1 {
-    margin: 0;
-    font-size: 1.8rem;
-}
-.controls button {
-    background-color: #007bff;
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    margin-left: 0.5rem;
-}
-.controls button:hover {
-    background-color: #0056b3;
-}
-.controls button#settings-button {
-    background-color: #6c757d;
-}
-.controls button#settings-button:hover {
-    background-color: #5a6268;
-}
-.hidden {
-    display: none;
-}
-.section {
-    margin-bottom: 2rem;
-}
-.section h2 {
-    color: #00aaff;
-    border-bottom: 1px solid #444;
-    padding-bottom: 0.5rem;
-    margin-bottom: 1rem;
-}
+header h1 { margin: 0; font-size: 1.8rem; }
+.controls button { background-color: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; margin-left: 0.5rem; }
+.controls button:hover { background-color: #0056b3; }
+.controls button#settings-button { background-color: #6c757d; }
+.controls button#settings-button:hover { background-color: #5a6268; }
+.hidden { display: none; }
+.section { margin-bottom: 2rem; }
+.section h2 { color: #00aaff; border-bottom: 1px solid #444; padding-bottom: 0.5rem; margin-bottom: 1rem; }
 .links {
     list-style: none;
     padding: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    /* This variable will be set by JavaScript based on settings */
+    grid-template-columns: repeat(var(--link-columns, 2), 1fr);
     gap: 1rem;
 }
-.links a {
-    color: #8ab4f8;
-    text-decoration: none;
-    font-size: 1.1em;
-}
-.links a:hover {
-    text-decoration: underline;
-}
+.links a { color: #8ab4f8; text-decoration: none; font-size: 1.1em; }
+.links a:hover { text-decoration: underline; }
+
 /* Edit Mode Styles */
 .edit-mode .section-header { display: flex; justify-content: space-between; align-items: center; }
 .edit-mode input[type="text"] { background-color: #333; color: #eee; border: 1px solid #555; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; width: calc(100% - 1.2rem); }
@@ -142,30 +122,19 @@ header h1 {
 .edit-mode .add-btn { background-color: #28a745; color: white; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer; margin-top: 0.5rem; }
 
 /* Modal Styles */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-    display: none; /* Hidden by default */
-}
-.modal-overlay.visible {
-    display: flex; /* Shown when .visible class is added */
-}
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); justify-content: center; align-items: center; z-index: 1000; display: none; }
+.modal-overlay.visible { display: flex; }
 .modal-content { background-color: #2c2c2c; padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
 .modal-content h2 { margin-top: 0; color: #00aaff;}
 .form-group { margin-bottom: 1rem; }
 .form-group label { display: block; margin-bottom: 0.5rem; }
-.form-group input[type="text"] { width: calc(100% - 1rem); background-color: #333; border: 1px solid #555; color: #eee; padding: 0.5rem; border-radius: 4px;}
+.form-group input[type="text"], .form-group input[type="number"] { width: calc(100% - 1rem); background-color: #333; border: 1px solid #555; color: #eee; padding: 0.5rem; border-radius: 4px;}
 .form-group input[type="checkbox"] { margin-right: 0.5rem; }
 .modal-actions { margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem; }
 .modal-actions button { background-color: #6c757d; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 5px; cursor: pointer; }
 .modal-actions button#save-settings-button { background-color: #007bff; }
+hr { border: 1px solid #444; margin: 1.5rem 0;}
+.warning-text { color: #ffc107; }
 """
 
 DEFAULT_JS = """
@@ -176,6 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSettings = {};
 
     // --- DOM Elements ---
+    const root = document.documentElement;
     const pageTitleElement = document.getElementById('page-title');
     const editButton = document.getElementById('edit-button');
     const saveButton = document.getElementById('save-button');
@@ -186,6 +156,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelSettingsButton = document.getElementById('cancel-settings-button');
     const pageTitleInput = document.getElementById('page-title-input');
     const newTabCheckbox = document.getElementById('new-tab-checkbox');
+    const linkColumnsInput = document.getElementById('link-columns-input');
+    const overwriteStaticCheckbox = document.getElementById('overwrite-static-checkbox');
+    
 
     // --- Data Fetching ---
     const fetchAllData = async () => {
@@ -194,9 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetch('/api/links'),
                 fetch('/api/settings')
             ]);
-            if (!linksResponse.ok || !settingsResponse.ok) {
-                throw new Error('Network response was not ok');
-            }
+            if (!linksResponse.ok || !settingsResponse.ok) throw new Error('Network response was not ok');
             currentLinks = await linksResponse.json();
             currentSettings = await settingsResponse.json();
             
@@ -205,7 +176,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             linksContainer.innerHTML = `<p style="color:red;">Error loading data: ${error.message}</p>`;
-            console.error('Fetch error:', error);
         }
     };
 
@@ -213,36 +183,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const applySettings = () => {
         document.title = currentSettings.pageTitle || 'Homepage';
         pageTitleElement.textContent = currentSettings.pageTitle || 'Homepage';
+        root.style.setProperty('--link-columns', currentSettings.linkColumns || 2);
     };
 
     const renderLinks = () => {
         linksContainer.innerHTML = '';
         const linkTarget = currentSettings.openLinksInNewTab ? '_blank' : '_self';
 
-        currentLinks.sections.forEach((section, sectionIndex) => {
+        (currentLinks.sections || []).forEach((section, sectionIndex) => {
             const sectionDiv = document.createElement('div');
             sectionDiv.className = 'section';
             
             let sectionHeaderHTML = isEditMode
-                ? `<div class="section-header">
-                       <input type="text" value="${section.title}" data-section-index="${sectionIndex}" class="section-title-input">
-                       <button class="remove-btn remove-section-btn" data-section-index="${sectionIndex}">Remove Section</button>
-                   </div>`
+                ? `<div class="section-header"><input type="text" value="${section.title}" class="section-title-input" data-section-index="${sectionIndex}"><button class="remove-btn remove-section-btn" data-section-index="${sectionIndex}">X</button></div>`
                 : `<h2>${section.title}</h2>`;
             sectionDiv.innerHTML = sectionHeaderHTML;
 
             const linksUl = document.createElement('ul');
             linksUl.className = 'links';
 
-            section.links.forEach((link, linkIndex) => {
+            (section.links || []).forEach((link, linkIndex) => {
                 const li = document.createElement('li');
                 li.className = 'link-item';
                 if (isEditMode) {
-                    li.innerHTML = `
-                        <input type="text" placeholder="Name" value="${link.name}" data-section-index="${sectionIndex}" data-link-index="${linkIndex}" class="link-name-input">
-                        <input type="text" placeholder="URL" value="${link.url}" data-section-index="${sectionIndex}" data-link-index="${linkIndex}" class="link-url-input">
-                        <button class="remove-btn remove-link-btn" data-section-index="${sectionIndex}" data-link-index="${linkIndex}">Remove Link</button>
-                    `;
+                    li.innerHTML = `<input type="text" placeholder="Name" value="${link.name}" class="link-name-input" data-section-index="${sectionIndex}" data-link-index="${linkIndex}"><input type="text" placeholder="URL" value="${link.url}" class="link-url-input" data-section-index="${sectionIndex}" data-link-index="${linkIndex}"><button class="remove-btn remove-link-btn" data-section-index="${sectionIndex}" data-link-index="${linkIndex}">X</button>`;
                 } else {
                     li.innerHTML = `<a href="${link.url}" target="${linkTarget}">${link.name}</a>`;
                 }
@@ -257,7 +221,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 addLinkBtn.dataset.sectionIndex = sectionIndex;
                 sectionDiv.appendChild(addLinkBtn);
             }
-
             linksContainer.appendChild(sectionDiv);
         });
 
@@ -278,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editButton.classList.toggle('hidden', isEditMode);
         settingsButton.classList.toggle('hidden', isEditMode);
         saveButton.classList.toggle('hidden', !isEditMode);
-        renderLinks(); // Re-render to show/hide inputs
+        renderLinks();
     };
 
     const saveLinkChanges = async () => {
@@ -304,9 +267,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sections })
             });
-            if (!response.ok) throw new Error('Failed to save');
-            currentLinks = { sections }; // Update local state
-            toggleEditMode(); // Exit edit mode
+            if (!response.ok) throw new Error('Failed to save link changes');
+            currentLinks = { sections };
+            toggleEditMode();
         } catch (error) {
             console.error('Error saving links:', error);
         }
@@ -316,17 +279,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const openSettingsModal = () => {
         pageTitleInput.value = currentSettings.pageTitle;
         newTabCheckbox.checked = currentSettings.openLinksInNewTab;
-        settingsModal.classList.add('visible'); // Use 'visible' class
+        linkColumnsInput.value = currentSettings.linkColumns;
+        overwriteStaticCheckbox.checked = currentSettings.forceOverwriteStaticFiles;
+        settingsModal.classList.add('visible');
     };
 
     const closeSettingsModal = () => {
-        settingsModal.classList.remove('visible'); // Use 'visible' class
+        settingsModal.classList.remove('visible');
     };
 
     const saveSettingsChanges = async () => {
         const newSettings = {
             pageTitle: pageTitleInput.value,
-            openLinksInNewTab: newTabCheckbox.checked
+            openLinksInNewTab: newTabCheckbox.checked,
+            linkColumns: parseInt(linkColumnsInput.value, 10),
+            forceOverwriteStaticFiles: overwriteStaticCheckbox.checked
         };
         try {
             const response = await fetch('/api/settings', {
@@ -335,9 +302,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(newSettings)
             });
             if (!response.ok) throw new Error('Failed to save settings');
-            currentSettings = newSettings; // Update local state
+            currentSettings = newSettings;
             applySettings();
-            renderLinks(); // Re-render links to apply new tab setting
+            renderLinks();
             closeSettingsModal();
         } catch (error) {
             console.error('Error saving settings:', error);
@@ -353,83 +320,112 @@ document.addEventListener('DOMContentLoaded', () => {
                 const linksUl = e.target.previousElementSibling;
                 const newLinkLi = document.createElement('li');
                 newLinkLi.className = 'link-item';
-                newLinkLi.innerHTML = `<input type="text" placeholder="Name" class="link-name-input"><input type="text" placeholder="URL" class="link-url-input"><button class="remove-btn remove-link-btn">Remove Link</button>`;
+                newLinkLi.innerHTML = `<input type="text" placeholder="Name" class="link-name-input"><input type="text" placeholder="URL" class="link-url-input"><button class="remove-btn remove-link-btn">X</button>`;
                 linksUl.appendChild(newLinkLi);
             }
             if(e.target.matches('.add-section-btn')) {
                  const newSectionDiv = document.createElement('div');
                  newSectionDiv.className = 'section';
-                 newSectionDiv.innerHTML = `<div class="section-header"><input type="text" value="New Section" class="section-title-input"><button class="remove-btn remove-section-btn">Remove Section</button></div><ul class="links"></ul><button class="add-btn add-link-btn">Add Link</button>`;
+                 newSectionDiv.innerHTML = `<div class="section-header"><input type="text" value="New Section" class="section-title-input"><button class="remove-btn remove-section-btn">X</button></div><ul class="links"></ul><button class="add-btn add-link-btn">Add Link</button>`;
                  linksContainer.insertBefore(newSectionDiv, e.target);
             }
         });
     }
-
+    
     editButton.addEventListener('click', toggleEditMode);
     saveButton.addEventListener('click', saveLinkChanges);
     settingsButton.addEventListener('click', openSettingsModal);
     cancelSettingsButton.addEventListener('click', closeSettingsModal);
     saveSettingsButton.addEventListener('click', saveSettingsChanges);
     settingsModal.addEventListener('click', (e) => {
-        if (e.target === settingsModal) closeSettingsModal(); // Close on overlay click
+        if (e.target === settingsModal) closeSettingsModal();
     });
 
-    // --- Initial Load ---
     fetchAllData();
 });
 """
 
 DEFAULT_LINKS = {
     "sections": [
-        {"title": "Getting Started", "links": [{"name": "Edit Links", "url": "#"}, {"name": "Google", "url": "https://google.com"}]},
-        {"title": "News", "links": [{"name": "Hacker News", "url": "https://news.ycombinator.com"}]}
+        {
+            "title": "Getting Started",
+            "links": [
+                {"name": "Edit Links", "url": "#"},
+                {"name": "Google", "url": "https://google.com"}
+            ]
+        },
+        {
+            "title": "News",
+            "links": [
+                {"name": "Hacker News", "url": "https://news.ycombinator.com"},
+                {"name": "Reddit", "url": "https://reddit.com"}
+            ]
+        }
     ]
 }
 
 DEFAULT_SETTINGS = {
     "pageTitle": "My Homepage",
-    "openLinksInNewTab": True
+    "openLinksInNewTab": True,
+    "linkColumns": 2,
+    "forceOverwriteStaticFiles": False
 }
 
 
 def initialize_app():
-    """Checks for required directories and files, creates them if missing."""
+    """Checks for required files and directories, creating or overwriting them based on settings."""
     print("Initializing application...")
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(STATIC_DIR, exist_ok=True)
 
-    # Check for links.json
+    # --- Settings File Handling ---
+    should_overwrite_static = False
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                existing_settings = json.load(f)
+            if existing_settings.get('forceOverwriteStaticFiles', False):
+                should_overwrite_static = True
+                print("Setting 'forceOverwriteStaticFiles' is true. Static files will be overwritten.")
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Warning: Could not read settings file, defaulting to not overwrite. Error: {e}")
+    else:
+        print(f"'{SETTINGS_FILE}' not found, creating with default content.")
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(DEFAULT_SETTINGS, f, indent=4)
+    
+    # --- Static File Handling ---
+    files_to_create = {
+        os.path.join(STATIC_DIR, 'index.html'): DEFAULT_HTML,
+        os.path.join(STATIC_DIR, 'style.css'): DEFAULT_CSS,
+        os.path.join(STATIC_DIR, 'scripts.js'): DEFAULT_JS
+    }
+    
+    if should_overwrite_static:
+        print("Overwriting static files...")
+        for fpath in files_to_create.keys():
+            if os.path.exists(fpath):
+                os.remove(fpath)
+    
+    for fpath, content in files_to_create.items():
+        if not os.path.exists(fpath):
+            print(f"Creating '{os.path.basename(fpath)}'.")
+            with open(fpath, 'w') as f:
+                f.write(content)
+
+    # --- Links File Handling ---
     if not os.path.exists(LINKS_FILE):
         print(f"'{LINKS_FILE}' not found, creating with default content.")
         with open(LINKS_FILE, 'w') as f:
             json.dump(DEFAULT_LINKS, f, indent=4)
 
-    # Check for settings.json
-    if not os.path.exists(SETTINGS_FILE):
-        print(f"'{SETTINGS_FILE}' not found, creating with default content.")
-        with open(SETTINGS_FILE, 'w') as f:
-            json.dump(DEFAULT_SETTINGS, f, indent=4)
-
-    # Check for static files (only create if missing, doesn't overwrite user changes)
-    files_to_check = {
-        os.path.join(STATIC_DIR, 'index.html'): DEFAULT_HTML,
-        os.path.join(STATIC_DIR, 'style.css'): DEFAULT_CSS,
-        os.path.join(STATIC_DIR, 'scripts.js'): DEFAULT_JS
-    }
-    for fpath, content in files_to_check.items():
-        if not os.path.exists(fpath):
-            print(f"'{fpath}' not found, creating with default content.")
-            with open(fpath, 'w') as f:
-                f.write(content)
     print("Initialization complete.")
 
 
-# --- App Initialization ---
+# --- App Initialization & Routes ---
 initialize_app()
 app = Flask(__name__, static_url_path='/static', static_folder=STATIC_DIR)
 
-
-# --- Flask Routes ---
 @app.route('/')
 def index():
     return send_from_directory(STATIC_DIR, 'index.html')
