@@ -1,15 +1,30 @@
-#!/bin/sh
+# Use an official Python runtime as a parent image
+FROM python:3.9-slim
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+# Set the working directory in the container
+WORKDIR /app
 
-# Run the initialization logic first.
-# We explicitly tell python to run the main() function from the main.py script.
-echo "--- Running initialization script ---"
-python -c 'from main import main; main()'
-echo "--- Initialization complete ---"
+# Install system dependencies that might be needed
+# (Keeping this as it is good practice, though not strictly needed for this app)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 
-# Now that initialization is guaranteed to be done, start Gunicorn.
-# The --access-logfile - and --error-logfile - flags will direct logs to the Docker console.
-echo "--- Starting Gunicorn ---"
-exec gunicorn --bind 0.0.0.0:8000 --access-logfile - --error-logfile - main:app
+# Copy the requirements file into the container
+COPY requirements.txt .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application source code and the new startup script
+COPY main.py .
+COPY start.sh .
+
+# Make the startup script executable
+RUN chmod +x ./start.sh
+
+# Define the volume that will hold your data and static files.
+VOLUME /app/config
+
+# Run the startup script.
+# This will run the initialization and then start Gunicorn.
+CMD ["./start.sh"]
