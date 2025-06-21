@@ -137,6 +137,8 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
 .warning-text { color: #ffc107; }
 """
 
+# In main.py
+
 DEFAULT_JS = """
 document.addEventListener('DOMContentLoaded', () => {
     // --- Global State ---
@@ -231,7 +233,8 @@ document.addEventListener('DOMContentLoaded', () => {
              linksContainer.appendChild(addSectionBtn);
         }
         
-        addDynamicEventListeners();
+        // ---- CHANGE #1: The line below has been removed from this function ----
+        // addDynamicEventListeners(); 
     };
     
     // --- Edit Mode Logic ---
@@ -332,6 +335,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // ---- CHANGE #2: The function call is now here, so it only runs once. ----
+    addDynamicEventListeners();
+
     editButton.addEventListener('click', toggleEditMode);
     saveButton.addEventListener('click', saveLinkChanges);
     settingsButton.addEventListener('click', openSettingsModal);
