@@ -11,7 +11,132 @@ LINKS_FILE = os.path.join(DATA_DIR, 'links.json')
 SETTINGS_FILE = os.path.join(DATA_DIR, 'settings.json')
 
 # --- Default File Content ---
-# Using the original, simpler JS without the timeout/retry logic.
+DEFAULT_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homepage</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 id="page-title">My Homepage</h1>
+            <div class="controls">
+                <button id="settings-button">Settings</button>
+                <button id="edit-button">Edit Links</button>
+                <button id="save-button" class="hidden">Save Changes</button>
+            </div>
+        </header>
+        <main id="links-container">
+            <!-- Links will be dynamically loaded here -->
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Settings</h2>
+            <form id="settings-form">
+                <div class="form-group">
+                    <label for="page-title-input">Page Title</label>
+                    <input type="text" id="page-title-input" name="pageTitle">
+                </div>
+                <div class="form-group">
+                    <label for="link-columns-input">Link Columns</label>
+                    <input type="number" id="link-columns-input" name="linkColumns" min="1" max="6" value="2">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="new-tab-checkbox" name="openLinksInNewTab">
+                        Open links in a new tab
+                    </label>
+                </div>
+                <hr>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="overwrite-static-checkbox" name="forceOverwriteStaticFiles">
+                        <span class="warning-text">Force overwrite static files on next restart (for testing)</span>
+                    </label>
+                </div>
+            </form>
+            <div class="modal-actions">
+                <button id="cancel-settings-button">Cancel</button>
+                <button id="save-settings-button">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/scripts.js"></script>
+</body>
+</html>
+"""
+
+DEFAULT_CSS = """
+body {
+    background-color: #121212;
+    color: #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 2rem;
+    transition: background-color 0.3s, color 0.3s;
+}
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #333;
+    padding-bottom: 1rem;
+    margin-bottom: 2rem;
+}
+header h1 { margin: 0; font-size: 1.8rem; }
+.controls button { background-color: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; margin-left: 0.5rem; }
+.controls button:hover { background-color: #0056b3; }
+.controls button#settings-button { background-color: #6c757d; }
+.controls button#settings-button:hover { background-color: #5a6268; }
+.hidden { display: none; }
+.section { margin-bottom: 2rem; }
+.section h2 { color: #00aaff; border-bottom: 1px solid #444; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+.links {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    /* This variable will be set by JavaScript based on settings */
+    grid-template-columns: repeat(var(--link-columns, 2), 1fr);
+    gap: 1rem;
+}
+.links a { color: #8ab4f8; text-decoration: none; font-size: 1.1em; }
+.links a:hover { text-decoration: underline; }
+
+/* Edit Mode Styles */
+.edit-mode .section-header { display: flex; justify-content: space-between; align-items: center; }
+.edit-mode input[type="text"] { background-color: #333; color: #eee; border: 1px solid #555; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; width: calc(100% - 1.2rem); }
+.edit-mode .link-item { display: flex; flex-direction: column; background-color: #2a2a2a; padding: 1rem; border-radius: 5px; }
+.edit-mode .remove-btn { background-color: #dc3545; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; align-self: flex-end; }
+.edit-mode .add-btn { background-color: #28a745; color: white; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer; margin-top: 0.5rem; }
+
+/* Modal Styles */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); justify-content: center; align-items: center; z-index: 1000; display: none; }
+.modal-overlay.visible { display: flex; }
+.modal-content { background-color: #2c2c2c; padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+.modal-content h2 { margin-top: 0; color: #00aaff;}
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; margin-bottom: 0.5rem; }
+.form-group input[type="text"], .form-group input[type="number"] { width: calc(100% - 1rem); background-color: #333; border: 1px solid #555; color: #eee; padding: 0.5rem; border-radius: 4px;}
+.form-group input[type="checkbox"] { margin-right: 0.5rem; }
+.modal-actions { margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem; }
+.modal-actions button { background-color: #6c757d; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 5px; cursor: pointer; }
+.modal-actions button#save-settings-button { background-color: #007bff; }
+hr { border: 1px solid #444; margin: 1.5rem 0;}
+.warning-text { color: #ffc107; }
+"""
+
 DEFAULT_JS = """
 document.addEventListener('DOMContentLoaded', () => {
     // --- Global State ---
@@ -249,7 +374,6 @@ DEFAULT_SETTINGS = {
 
 def initialize_app():
     """Checks for required files and directories, creating or overwriting them based on settings."""
-    print("Initializing application...")
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(STATIC_DIR, exist_ok=True)
 
@@ -270,39 +394,17 @@ def initialize_app():
             json.dump(DEFAULT_SETTINGS, f, indent=4)
     
     # --- Static File Handling ---
-    # Note: We need to define default HTML and CSS here, or import them, for this to be self-contained.
-    # For this example, I'm assuming the DEFAULT_JS, etc., variables are defined above in this file.
     files_to_create = {
-        os.path.join(STATIC_DIR, 'index.html'): "<!-- Populated by script -->", # This will be created from a string
-        os.path.join(STATIC_DIR, 'style.css'): "/* Populated by script */",
+        os.path.join(STATIC_DIR, 'index.html'): DEFAULT_HTML,
+        os.path.join(STATIC_DIR, 'style.css'): DEFAULT_CSS,
         os.path.join(STATIC_DIR, 'scripts.js'): DEFAULT_JS
     }
     
-    if should_overwrite_static:
-        print("Overwriting static files...")
-        for fpath in files_to_create.keys():
-            if os.path.exists(fpath):
-                # We can just overwrite, no need to remove first
-                pass
-    
-    # Create files if they don't exist OR if overwrite is true
-    # This logic is simplified
     for fpath, content in files_to_create.items():
-        # A simple check: if the file doesn't exist, create it. If we must overwrite, we'll write it anyway.
         if not os.path.exists(fpath) or should_overwrite_static:
             print(f"Creating or overwriting '{os.path.basename(fpath)}'.")
-            # For simplicity, using dummy content for HTML/CSS, as JS is the focus
-            if 'index.html' in fpath:
-                # You would have your full DEFAULT_HTML here
-                final_content = "<!-- Your full default HTML here -->"
-            elif 'style.css' in fpath:
-                 # You would have your full DEFAULT_CSS here
-                final_content = "/* Your full default CSS here */"
-            else:
-                final_content = content
             with open(fpath, 'w') as f:
-                f.write(final_content)
-
+                f.write(content)
 
     # --- Links File Handling ---
     if not os.path.exists(LINKS_FILE):
@@ -310,11 +412,8 @@ def initialize_app():
         with open(LINKS_FILE, 'w') as f:
             json.dump(DEFAULT_LINKS, f, indent=4)
 
-    print("Initialization complete.")
-
 
 # --- App Definition ---
-# The app is defined here, but not run. Gunicorn will find this 'app' object.
 app = Flask(__name__, static_url_path='/static', static_folder=STATIC_DIR)
 
 @app.route('/')
@@ -359,14 +458,15 @@ def save_settings():
     except Exception as e:
         return jsonify({"error": f"Failed to save settings: {e}"}), 500
 
-# This main entry point is for the startup script to call.
-# It can also be used for local testing (e.g., python main.py).
+# This function will be called by the startup script.
 def main():
+    print("--- Running initialization ---")
     initialize_app()
+    print("--- Initialization complete ---")
 
+# This block is for direct execution (e.g. `python main.py`)
 if __name__ == '__main__':
     main()
-    # For local development, you might want to run the Flask dev server
-    # Note: This part is not used by Gunicorn or the startup script.
+    # This part is for local development and won't be used by Gunicorn
+    print("--- Starting Flask development server ---")
     app.run(host='0.0.0.0', port=8000, debug=True)
-
