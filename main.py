@@ -27,6 +27,7 @@ DEFAULT_HTML = """
             <div class="controls">
                 <button id="settings-button">Settings</button>
                 <button id="edit-button">Edit Links</button>
+                <button id="discard-button" class="hidden">Discard</button>
                 <button id="save-button" class="hidden">Save Changes</button>
             </div>
         </header>
@@ -98,8 +99,8 @@ header {
 header h1 { margin: 0; font-size: 1.8rem; }
 .controls button { background-color: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; margin-left: 0.5rem; }
 .controls button:hover { background-color: #0056b3; }
-.controls button#settings-button { background-color: #6c757d; }
-.controls button#settings-button:hover { background-color: #5a6268; }
+.controls button#settings-button, .controls button#discard-button { background-color: #6c757d; }
+.controls button#settings-button:hover, .controls button#discard-button:hover { background-color: #5a6268; }
 .hidden { display: none; }
 .section { margin-bottom: 2rem; }
 .section h2 { color: #00aaff; border-bottom: 1px solid #444; padding-bottom: 0.5rem; margin-bottom: 1rem; }
@@ -149,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const pageTitleElement = document.getElementById('page-title');
     const editButton = document.getElementById('edit-button');
     const saveButton = document.getElementById('save-button');
+    const discardButton = document.getElementById('discard-button');
     const linksContainer = document.getElementById('links-container');
     const settingsButton = document.getElementById('settings-button');
     const settingsModal = document.getElementById('settings-modal');
@@ -239,6 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editButton.classList.toggle('hidden', isEditMode);
         settingsButton.classList.toggle('hidden', isEditMode);
         saveButton.classList.toggle('hidden', !isEditMode);
+        discardButton.classList.toggle('hidden', !isEditMode);
         renderLinks();
     };
 
@@ -334,6 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     editButton.addEventListener('click', toggleEditMode);
     saveButton.addEventListener('click', saveLinkChanges);
+    discardButton.addEventListener('click', toggleEditMode); // Discard just needs to toggle the mode
     settingsButton.addEventListener('click', openSettingsModal);
     cancelSettingsButton.addEventListener('click', closeSettingsModal);
     saveSettingsButton.addEventListener('click', saveSettingsChanges);
