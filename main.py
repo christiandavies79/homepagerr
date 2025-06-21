@@ -401,7 +401,20 @@ document.addEventListener('DOMContentLoaded', () => {
         addLinkForm.reset();
         newSectionGroup.classList.add('hidden');
         linkUrlInput.value = url;
-        linkNameInput.value = url.replace(/(^\w+:|^)\/\//, '').replace(/^www\./, ''); // Smart default name
+
+        // Create a valid URL for parsing the hostname, adding a protocol if missing.
+        let urlForParsing = url;
+        if (!urlForParsing.startsWith('http://') && !urlForParsing.startsWith('https://')) {
+            urlForParsing = 'http://' + urlForParsing;
+        }
+
+        try {
+            const parsedUrl = new URL(urlForParsing);
+            linkNameInput.value = parsedUrl.hostname.replace(/^www\\./, '');
+        } catch (e) {
+            // Fallback for any edge cases, like 'localhost'
+            linkNameInput.value = url;
+        }
         
         // Populate sections
         linkSectionSelect.innerHTML = '';
@@ -430,7 +443,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const newSectionTitle = newSectionTitleInput.value.trim();
 
         if (!name || !url) {
-            alert('Link Name and URL cannot be empty.');
+            // Replaced alert with a less intrusive console log.
+            console.error('Link Name and URL cannot be empty.');
             return;
         }
 
@@ -439,7 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (sectionChoice === '--new-section--') {
             if (!newSectionTitle) {
-                alert('New section title cannot be empty.');
+                console.error('New section title cannot be empty.');
                 return;
             }
             updatedLinks.sections.push({ title: newSectionTitle, links: [newLink] });
@@ -515,13 +529,19 @@ document.addEventListener('DOMContentLoaded', () => {
         dragCounter = 0;
         dragOverlay.classList.add('hidden');
 
-        const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
-        const urlRegex = /^(https?:\\/\\/)?([\\da-z\\.-]+)\\.([a-z\\.]{2,6})([\\/\\w \\.-]*)*\\/?$/;
-        
-        if (url && urlRegex.test(url)) {
-            openAddLinkModal(url);
-        } else {
-            console.warn('Dropped item is not a valid URL:', url);
+        const droppedText = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+        if (!droppedText) return;
+
+        let urlToTest = droppedText.trim();
+        if (!urlToTest.startsWith('http://') && !urlToTest.startsWith('https://')) {
+            urlToTest = 'http://' + urlToTest;
+        }
+
+        try {
+            new URL(urlToTest); // This is just for validation
+            openAddLinkModal(droppedText.trim()); // Use the original, trimmed text
+        } catch (err) {
+            console.warn('Dropped item is not a valid URL:', droppedText);
         }
     });
 
