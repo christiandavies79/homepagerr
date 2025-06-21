@@ -36,7 +36,7 @@ DEFAULT_HTML = """
     </div>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="modal-overlay hidden">
+    <div id="settings-modal" class="modal-overlay"> <!-- Removed 'hidden' class -->
         <div class="modal-content">
             <h2>Settings</h2>
             <form id="settings-form">
@@ -142,7 +142,21 @@ header h1 {
 .edit-mode .add-btn { background-color: #28a745; color: white; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer; margin-top: 0.5rem; }
 
 /* Modal Styles */
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    display: none; /* Hidden by default */
+}
+.modal-overlay.visible {
+    display: flex; /* Shown when .visible class is added */
+}
 .modal-content { background-color: #2c2c2c; padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
 .modal-content h2 { margin-top: 0; color: #00aaff;}
 .form-group { margin-bottom: 1rem; }
@@ -302,11 +316,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const openSettingsModal = () => {
         pageTitleInput.value = currentSettings.pageTitle;
         newTabCheckbox.checked = currentSettings.openLinksInNewTab;
-        settingsModal.classList.remove('hidden');
+        settingsModal.classList.add('visible'); // Use 'visible' class
     };
 
     const closeSettingsModal = () => {
-        settingsModal.classList.add('hidden');
+        settingsModal.classList.remove('visible'); // Use 'visible' class
     };
 
     const saveSettingsChanges = async () => {
