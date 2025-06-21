@@ -2,18 +2,15 @@ import os
 import json
 from flask import Flask, send_from_directory, request, jsonify
 
-# Configuration
+# --- Configuration ---
 # The single volume you mount from your host (e.g., Unraid appdata)
 CONFIG_DIR = '/app/config'
 DATA_DIR = os.path.join(CONFIG_DIR, 'data')
 STATIC_DIR = os.path.join(CONFIG_DIR, 'static')
 LINKS_FILE = os.path.join(DATA_DIR, 'links.json')
 
-app = Flask(__name__)
-
 # --- Default File Content ---
-# These strings contain the default content for the files if they are missing.
-
+# (Content is unchanged, but included for completeness)
 DEFAULT_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -331,21 +328,18 @@ DEFAULT_LINKS = {
     ]
 }
 
-# --- Initialization on Startup ---
+
 def initialize_app():
     """Checks for required directories and files, creates them if missing."""
     print("Initializing application...")
-    # Create directories if they don't exist
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(STATIC_DIR, exist_ok=True)
 
-    # Check for links.json
     if not os.path.exists(LINKS_FILE):
         print(f"'{LINKS_FILE}' not found, creating with default content.")
         with open(LINKS_FILE, 'w') as f:
             json.dump(DEFAULT_LINKS, f, indent=4)
 
-    # Check for static files
     files_to_check = {
         os.path.join(STATIC_DIR, 'index.html'): DEFAULT_HTML,
         os.path.join(STATIC_DIR, 'style.css'): DEFAULT_CSS,
@@ -360,16 +354,23 @@ def initialize_app():
     print("Initialization complete.")
 
 
+# --- App Initialization ---
+# 1. Initialize file structure *before* creating the app object
+initialize_app()
+
+# 2. Create the Flask app, explicitly telling it where the static files are.
+#    This is more robust than a custom route.
+app = Flask(__name__, static_url_path='/static', static_folder=STATIC_DIR)
+
+
 # --- Flask Routes ---
 @app.route('/')
 def index():
     """Serve the main index.html file."""
     return send_from_directory(STATIC_DIR, 'index.html')
 
-@app.route('/static/<path:path>')
-def send_static(path):
-    """Serve static files like CSS and JS."""
-    return send_from_directory(STATIC_DIR, path)
+# The custom static file route is no longer needed, as Flask handles it now.
+# @app.route('/static/<path:path>') ...
 
 @app.route('/api/links', methods=['GET'])
 def get_links():
@@ -396,6 +397,6 @@ def save_links():
 
 
 if __name__ == '__main__':
-    initialize_app()
-    # For local development without gunicorn
+    # This block is only for local development (e.g., `python main.py`)
+    # It will not run when using Gunicorn.
     app.run(host='0.0.0.0', port=8000, debug=True)

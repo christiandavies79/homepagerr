@@ -21,8 +21,7 @@ COPY main.py .
 # This allows you to manage your config, data, and frontend files outside the container.
 VOLUME /app/config
 
-# Run the initialization function and then start Gunicorn when the container launches.
-# Gunicorn is a robust production WSGI server.
-# The 'CMD' command will execute the python script which will initialize and then Gunicorn will take over.
-# We're using an entrypoint script to ensure initialization runs first.
-CMD ["sh", "-c", "python main.py && gunicorn --bind 0.0.0.0:8000 main:app"]
+# Run Gunicorn to serve the app.
+# Because the initialization logic in main.py is now at the top level,
+# it will run automatically when Gunicorn imports the `app` object.
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "main:app"]
