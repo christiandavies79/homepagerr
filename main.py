@@ -2,6 +2,7 @@ import os
 import json
 import shutil
 import requests
+import sys
 from flask import Flask, send_from_directory, request, jsonify
 
 # --- Configuration ---
@@ -547,11 +548,13 @@ document.addEventListener('DOMContentLoaded', () => {
         isEditMode = !isEditMode;
         document.body.classList.toggle('edit-mode', isEditMode);
 
-        // Toggle visibility of header controls based on edit mode
+        // Hide/show main controls when entering/exiting edit mode
         searchWrapper.classList.toggle('hidden', isEditMode);
         settingsButton.classList.toggle('hidden', isEditMode);
         notepadButton.classList.toggle('hidden', isEditMode);
         editButton.classList.toggle('hidden', isEditMode);
+
+        // Hide/show edit-specific controls
         saveButton.classList.toggle('hidden', !isEditMode);
         discardButton.classList.toggle('hidden', !isEditMode);
         
@@ -574,7 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (!response.ok) throw new Error('Failed to save link changes');
             currentLinks = newLinkData;
-            toggleEditMode(); // This will exit edit mode and re-render
+            toggleEditMode(); // Exit edit mode and re-render
         } catch (error) {
             console.error('Error saving links:', error);
         }
@@ -584,7 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newSections = [];
         document.querySelectorAll('.section').forEach(sectionDiv => {
             const titleInput = sectionDiv.querySelector('.section-title-input');
-            if (!titleInput) return; // Should not happen in edit mode
+            if (!titleInput) return;
             const newSection = { title: titleInput.value, links: [] };
             sectionDiv.querySelectorAll('.link-item').forEach(linkItem => {
                 const nameInput = linkItem.querySelector('.link-name-input');
@@ -603,7 +606,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pageTitleInput.value = currentSettings.pageTitle;
         newTabCheckbox.checked = currentSettings.openLinksInNewTab;
         linkColumnsInput.value = currentSettings.linkColumns;
-        overwriteStaticCheckbox.checked = currentSettings.forceOverwriteStaticFiles;
+        overwriteStaticCheckbox.checked = false; // Always default to false
         settingsModal.classList.add('visible');
     };
 
@@ -623,7 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error('Failed to save settings');
             currentSettings = newSettings;
             applySettings();
-            renderLinks(); // Re-render links in case columns changed
+            renderLinks();
             closeSettingsModal();
         } catch (error) {
             console.error('Error saving settings:', error);
@@ -705,7 +708,17 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             updatedLinks.sections[parseInt(sectionChoice, 10)].links.push(newLink);
         }
-        saveAllLinkChanges(updatedLinks);
+        // This is a bit abrupt. Instead of calling the full save, let's just update the local data
+        // and re-render. This is better UX for drag-drop.
+        currentLinks = updatedLinks;
+        renderLinks();
+        // Now save in the background
+        fetch('/api/links', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(currentLinks)
+        }).catch(err => console.error("Failed to save new link in background:", err));
+
         closeAddLinkModal();
     };
 
@@ -853,13 +866,13 @@ def initialize_app():
                 settings = json.load(f)
                 if settings.get('forceOverwriteStaticFiles', False):
                     should_overwrite_static = True
-                    print("Setting 'forceOverwriteStaticFiles' is true. Static files will be overwritten.")
-                    # Set it back to false after overwriting
+                    print("Setting 'forceOverwriteStaticFiles' is true. Static files will be overwritten.", flush=True)
+                    # Set it back to false after overwriting to prevent re-running
                     settings['forceOverwriteStaticFiles'] = False
                     with open(SETTINGS_FILE, 'w') as fw:
                         json.dump(settings, fw, indent=4)
         except (json.JSONDecodeError, IOError) as e:
-            print(f"Warning: Could not read settings file: {e}")
+            print(f"Warning: Could not read settings file: {e}", flush=True)
     else:
         with open(SETTINGS_FILE, 'w') as f: json.dump(DEFAULT_SETTINGS, f, indent=4)
 
@@ -871,7 +884,7 @@ def initialize_app():
 
     for fpath, content in files_to_create.items():
         if not os.path.exists(fpath) or should_overwrite_static:
-            print(f"Creating or overwriting '{os.path.basename(fpath)}'.")
+            print(f"Creating or overwriting '{os.path.basename(fpath)}'.", flush=True)
             with open(fpath, 'w', encoding='utf-8') as f: f.write(content)
 
     if not os.path.exists(LINKS_FILE):
@@ -883,6 +896,10 @@ def initialize_app():
 
 # --- App Definition ---
 app = Flask(__name__, static_url_path='/static', static_folder=STATIC_DIR)
+
+# Helper function to print to stderr for Docker logs
+def log_message(message):
+    print(message, file=sys.stderr, flush=True)
 
 @app.route('/')
 def index():
@@ -917,27 +934,25 @@ def save_json_file(file_path):
 def handle_links():
     if request.method == 'POST':
         return save_json_file(LINKS_FILE)
-    else:
-        return get_json_file(LINKS_FILE)
+    return get_json_file(LINKS_FILE)
 
 @app.route('/api/settings', methods=['GET', 'POST'])
 def handle_settings():
     if request.method == 'POST':
         return save_json_file(SETTINGS_FILE)
-    else:
-        return get_json_file(SETTINGS_FILE)
+    return get_json_file(SETTINGS_FILE)
 
 @app.route('/api/notes', methods=['GET', 'POST'])
 def handle_notes():
     if request.method == 'POST':
         return save_json_file(NOTES_FILE)
-    else:
-        return get_json_file(NOTES_FILE)
+    return get_json_file(NOTES_FILE)
 
 @app.route('/api/uptime-kuma-status')
 def get_uptime_kuma_status():
     """
-    Fetches the status from an Uptime Kuma instance if the UK_URL env var is set.
+    Fetches and processes the status from an Uptime Kuma instance.
+    Includes detailed logging for debugging purposes.
     """
     uk_url = os.environ.get('UK_URL')
     if not uk_url:
@@ -946,41 +961,59 @@ def get_uptime_kuma_status():
     uk_url = uk_url.rstrip('/')
     heartbeat_api_url = f"{uk_url}/api/status-page/heartbeat/all-checks"
 
+    log_message("\n--- [Uptime Kuma] Starting status fetch ---")
+    log_message(f"[Uptime Kuma] Requesting URL: {heartbeat_api_url}")
+
     try:
         response = requests.get(heartbeat_api_url, timeout=10)
+        log_message(f"[Uptime Kuma] Received HTTP status code: {response.status_code}")
         response.raise_for_status()
         data = response.json()
 
         overall_status = "ok"
-
         heartbeat_list = data.get("heartbeatList", {})
+
+        if not heartbeat_list:
+            log_message("[Uptime Kuma] Warning: heartbeatList is empty or missing in the response.")
+            # Keep status as 'ok' but you might want an 'error' or 'unknown' state
+        
         for monitor_id, heartbeats in heartbeat_list.items():
             if heartbeats:
-                # The first item in the list is the most recent status
+                # The first item in the list is the most recent heartbeat.
                 latest_heartbeat = heartbeats[0]
-                # In Uptime Kuma, status 1 is "Up". Status 0 is "Down", 2 is "Pending".
-                # Any status other than 1 is considered a problem state.
-                if latest_heartbeat.get("status") != 1:
-                    overall_status = "investigate"
-                    break # A single failure is enough to change the overall status
+                latest_status = latest_heartbeat.get("status")
+                log_message(f"[Uptime Kuma] Monitor '{monitor_id}' latest status is: {latest_status}")
 
+                # In Uptime Kuma, status 1 is "Up". Others (0=Down, 2=Pending) are problem states.
+                if latest_status != 1:
+                    overall_status = "investigate"
+                    log_message(f"[Uptime Kuma] !! Monitor '{monitor_id}' triggered 'investigate' state. Halting further checks.")
+                    break # A single failure is enough to change the overall status
+            else:
+                log_message(f"[Uptime Kuma] Warning: Monitor '{monitor_id}' has an empty heartbeat list.")
+
+        log_message(f"[Uptime Kuma] Final determined overall_status: '{overall_status}'")
+        log_message("--- [Uptime Kuma] Finished status fetch ---\n")
+        
         return jsonify({
             "enabled": True,
             "status": overall_status
         })
 
     except requests.exceptions.RequestException as e:
+        log_message(f"[Uptime Kuma] ERROR: Could not connect to Uptime Kuma. Details: {e}")
         return jsonify({"enabled": True, "status": "error", "message": f"Could not connect to Uptime Kuma: {e}"}), 500
     except Exception as e:
+        log_message(f"[Uptime Kuma] ERROR: An unexpected error occurred. Details: {e}")
         return jsonify({"enabled": True, "status": "error", "message": f"An unexpected error occurred: {e}"}), 500
 
 def main():
     """Main function to run initialization."""
-    print("--- Running initialization ---")
+    log_message("--- Running initialization ---")
     initialize_app()
-    print("--- Initialization complete ---")
+    log_message("--- Initialization complete ---")
 
 if __name__ == '__main__':
     main()
-    print("--- Starting Flask development server ---")
+    log_message("--- Starting Flask development server ---")
     app.run(host='0.0.0.0', port=8000, debug=True)
