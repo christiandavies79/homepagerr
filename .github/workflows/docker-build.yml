@@ -1,9 +1,10 @@
 name: Build and Push Docker Image
 
-# This action will now trigger on a push to *any* branch
 on:
   push:
     branches: [ "**" ]
+    paths-ignore:
+      - 'README.md'
 
 jobs:
   build-and-push:
