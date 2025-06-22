@@ -24,6 +24,9 @@ DEFAULT_HTML = """
     <div class="container">
         <header>
             <h1 id="page-title">My Homepage</h1>
+            <div class="search-wrapper">
+                <input type="search" id="search-input" placeholder="Search links...">
+            </div>
             <div class="controls">
                 <button id="settings-button">Settings</button>
                 <button id="edit-button">Edit Links</button>
@@ -134,13 +137,26 @@ header {
     border-bottom: 2px solid #333;
     padding-bottom: 1rem;
     margin-bottom: 2rem;
+    flex-wrap: wrap; /* Allow wrapping for search bar */
 }
 header h1 { margin: 0; font-size: 1.8rem; }
+.search-wrapper { flex-grow: 1; margin: 0 1rem; }
+#search-input {
+    width: 100%;
+    background-color: #333;
+    color: #eee;
+    border: 1px solid #555;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 1rem;
+}
 .controls button { background-color: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; margin-left: 0.5rem; }
 .controls button:hover { background-color: #0056b3; }
 .controls button#settings-button, .controls button#discard-button { background-color: #6c757d; }
 .controls button#settings-button:hover, .controls button#discard-button:hover { background-color: #5a6268; }
 .hidden { display: none; }
+.search-hidden { display: none !important; } /* High importance to override other styles */
+
 .section { margin-bottom: 2rem; }
 .section h2 { color: #00aaff; border-bottom: 1px solid #444; padding-bottom: 0.5rem; margin-bottom: 1rem; }
 .links {
@@ -210,6 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Elements ---
     const root = document.documentElement;
     const pageTitleElement = document.getElementById('page-title');
+    const searchInput = document.getElementById('search-input');
     const editButton = document.getElementById('edit-button');
     const saveButton = document.getElementById('save-button');
     const discardButton = document.getElementById('discard-button');
@@ -286,7 +303,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isEditMode) {
                     li.innerHTML = `<input type="text" placeholder="Name" value="${link.name}" class="link-name-input" data-section-index="${sectionIndex}" data-link-index="${linkIndex}"><input type="text" placeholder="URL" value="${link.url}" class="link-url-input" data-section-index="${sectionIndex}" data-link-index="${linkIndex}"><button class="remove-btn remove-link-btn" data-section-index="${sectionIndex}" data-link-index="${linkIndex}">X</button>`;
                 } else {
-                    li.innerHTML = `<a href="${link.url}" target="${linkTarget}">${link.name}</a>`;
+                    const linkAnchor = document.createElement('a');
+                    linkAnchor.href = link.url;
+                    linkAnchor.target = linkTarget;
+                    linkAnchor.textContent = link.name;
+                    // Add data attributes for searching
+                    linkAnchor.setAttribute('data-name', link.name.toLowerCase());
+                    linkAnchor.setAttribute('data-url', link.url.toLowerCase());
+                    li.appendChild(linkAnchor);
                 }
                 linksUl.appendChild(li);
             });
@@ -310,6 +334,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
+    // --- Search Logic ---
+    const handleSearch = () => {
+        const searchTerm = searchInput.value.toLowerCase();
+
+        document.querySelectorAll('.section').forEach(section => {
+            let sectionHasVisibleLink = false;
+            section.querySelectorAll('.link-item').forEach(item => {
+                const link = item.querySelector('a');
+                if (link) {
+                    const name = link.getAttribute('data-name');
+                    const url = link.getAttribute('data-url');
+                    const isVisible = name.includes(searchTerm) || url.includes(searchTerm);
+                    item.classList.toggle('search-hidden', !isVisible);
+                    if (isVisible) {
+                        sectionHasVisibleLink = true;
+                    }
+                }
+            });
+            section.classList.toggle('search-hidden', !sectionHasVisibleLink);
+        });
+    };
+
     // --- Edit Mode Logic ---
     const toggleEditMode = () => {
         isEditMode = !isEditMode;
@@ -318,6 +364,11 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsButton.classList.toggle('hidden', isEditMode);
         saveButton.classList.toggle('hidden', !isEditMode);
         discardButton.classList.toggle('hidden', !isEditMode);
+        searchInput.disabled = isEditMode; // Disable search in edit mode
+        if (!isEditMode) {
+            searchInput.value = ''; // Clear search on exiting edit mode
+            handleSearch(); // Reset view
+        }
         renderLinks();
     };
 
@@ -402,7 +453,6 @@ document.addEventListener('DOMContentLoaded', () => {
         newSectionGroup.classList.add('hidden');
         linkUrlInput.value = url;
 
-        // Create a valid URL for parsing the hostname, adding a protocol if missing.
         let urlForParsing = url;
         if (!urlForParsing.startsWith('http://') && !urlForParsing.startsWith('https://')) {
             urlForParsing = 'http://' + urlForParsing;
@@ -412,11 +462,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const parsedUrl = new URL(urlForParsing);
             linkNameInput.value = parsedUrl.hostname.replace(/^www\\./, '');
         } catch (e) {
-            // Fallback for any edge cases, like 'localhost'
             linkNameInput.value = url;
         }
         
-        // Populate sections
         linkSectionSelect.innerHTML = '';
         currentLinks.sections.forEach((section, index) => {
             const option = document.createElement('option');
@@ -443,13 +491,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const newSectionTitle = newSectionTitleInput.value.trim();
 
         if (!name || !url) {
-            // Replaced alert with a less intrusive console log.
             console.error('Link Name and URL cannot be empty.');
             return;
         }
 
         const newLink = { name, url };
-        let updatedLinks = JSON.parse(JSON.stringify(currentLinks)); // Deep copy
+        let updatedLinks = JSON.parse(JSON.stringify(currentLinks));
 
         if (sectionChoice === '--new-section--') {
             if (!newSectionTitle) {
@@ -489,6 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Static Event Listeners Setup ---
     addDynamicEventListeners();
+    searchInput.addEventListener('input', handleSearch);
 
     editButton.addEventListener('click', toggleEditMode);
     saveButton.addEventListener('click', saveLinkChangesFromEditMode);
@@ -506,7 +554,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('dragenter', (e) => {
         e.preventDefault();
         const isLink = e.dataTransfer.types.includes('text/uri-list') || e.dataTransfer.types.includes('text/plain');
-        if (isLink) {
+        if (isLink && !isEditMode) { // Only show overlay if not in edit mode
             dragCounter++;
             dragOverlay.classList.remove('hidden');
         }
@@ -521,11 +569,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('dragover', (e) => {
-        e.preventDefault(); // This is necessary to allow a drop
+        e.preventDefault();
     });
 
     window.addEventListener('drop', (e) => {
         e.preventDefault();
+        if (isEditMode) return;
         dragCounter = 0;
         dragOverlay.classList.add('hidden');
 
@@ -538,8 +587,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            new URL(urlToTest); // This is just for validation
-            openAddLinkModal(droppedText.trim()); // Use the original, trimmed text
+            new URL(urlToTest);
+            openAddLinkModal(droppedText.trim());
         } catch (err) {
             console.warn('Dropped item is not a valid URL:', droppedText);
         }
