@@ -38,8 +38,16 @@ DEFAULT_HTML = """
                         <path d="M12.5 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5-.5h-2a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5zM12 3.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5"/>
                     </svg>
                 </button>
-                <button id="settings-button">Settings</button>
-                <button id="edit-button">Edit Links</button>
+                <button id="settings-button" title="Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311a1.464 1.464 0 0 1-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c-1.4-.413-1.4-2.397 0-2.81l.34-.1a1.464 1.464 0 0 1 .872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.858 2.929 2.929 0 0 1 0 5.858z"/>
+                    </svg>
+                </button>
+                <button id="edit-button" title="Edit Links">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.178z"/>
+                    </svg>
+                </button>
                 <button id="discard-button" class="hidden">Discard</button>
                 <button id="save-button" class="hidden">Save Changes</button>
             </div>
@@ -175,11 +183,11 @@ header {
     border-bottom: 2px solid #333;
     padding-bottom: 1rem;
     margin-bottom: 2rem;
-    flex-wrap: wrap; /* Allow wrapping for search bar */
-    gap: 1rem; /* Add gap between header items */
+    flex-wrap: nowrap;
+    gap: 1rem;
 }
-header h1 { margin: 0; font-size: 1.8rem; flex-shrink: 0; }
-.search-wrapper { flex-grow: 1; min-width: 200px; }
+header h1 { margin: 0; font-size: 1.8rem; flex-shrink: 0; white-space: nowrap; }
+.search-wrapper { flex-grow: 1; max-width: 250px; min-width: 150px; }
 #search-input {
     width: 100%;
     background-color: #333;
@@ -190,13 +198,31 @@ header h1 { margin: 0; font-size: 1.8rem; flex-shrink: 0; }
     font-size: 1rem;
 }
 .controls { display: flex; flex-shrink: 0; }
-.controls button { background-color: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; margin-left: 0.5rem; }
+.controls button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    margin-left: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 .controls button:hover { background-color: #0056b3; }
 .controls button#settings-button, .controls button#discard-button, .controls button#notepad-button { background-color: #6c757d; }
 .controls button#settings-button:hover, .controls button#discard-button:hover, .controls button#notepad-button:hover { background-color: #5a6268; }
-.controls button#notepad-button { padding: 0.5rem 0.75rem; } /* Tweak padding for icon */
+.controls button#edit-button { background-color: #007bff; }
+.controls button#edit-button:hover { background-color: #0056b3; }
+.controls button#notepad-button, .controls button#settings-button, .controls button#edit-button {
+    width: 40px;
+    height: 36px;
+    padding: 0;
+}
 .hidden { display: none; }
-.search-hidden { display: none !important; } /* High importance to override other styles */
+.search-hidden { display: none !important; }
 
 .section {
     margin-bottom: 2rem;
@@ -210,63 +236,33 @@ header h1 { margin: 0; font-size: 1.8rem; flex-shrink: 0; }
     list-style: none;
     padding: 0;
     display: grid;
-    /* This variable will be set by JavaScript based on settings */
     grid-template-columns: repeat(var(--link-columns, 2), 1fr);
     gap: 1rem;
-    min-height: 50px; /* Give a drop target for empty lists */
+    min-height: 50px;
 }
 .links a { color: #8ab4f8; text-decoration: none; font-size: 1.1em; }
 .links a:hover { text-decoration: underline; }
 
 /* Edit Mode Styles */
-.edit-mode .section {
-    border: 1px dashed #555;
-}
-.edit-mode .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.edit-mode .section-header-title {
-    display: flex;
-    align-items: center;
-    flex-grow: 1;
-}
+.edit-mode .section { border: 1px dashed #555; }
+.edit-mode .section-header { display: flex; justify-content: space-between; align-items: center; }
+.edit-mode .section-header-title { display: flex; align-items: center; flex-grow: 1; }
 .edit-mode input[type="text"] { background-color: #333; color: #eee; border: 1px solid #555; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; width: 100%; }
-.edit-mode .link-item {
-    display: flex;
-    align-items: center; /* Align handle with content */
-    background-color: #2a2a2a;
-    padding: 0.5rem 1rem;
-    border-radius: 5px;
-}
+.edit-mode .link-item { display: flex; align-items: center; background-color: #2a2a2a; padding: 0.5rem 1rem; border-radius: 5px; }
 .edit-mode .link-item-content { flex-grow: 1; }
 .edit-mode .remove-btn { background-color: #dc3545; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; align-self: center; margin-left: 0.5rem; flex-shrink: 0; }
 .edit-mode .add-btn { background-color: #28a745; color: white; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer; margin-top: 0.5rem; }
-.drag-handle {
-    cursor: grab;
-    color: #888;
-    margin-right: 10px;
-    font-size: 1.2rem;
-    line-height: 1;
-}
+.drag-handle { cursor: grab; color: #888; margin-right: 10px; font-size: 1.2rem; line-height: 1; }
 .drag-handle:active { cursor: grabbing; }
-.sortable-ghost {
-    background-color: #007bff;
-    opacity: 0.4;
-}
-.sortable-chosen {
-    background-color: #2a2a2a; /* Keep original background when chosen */
-}
-.section.sortable-ghost {
-    background-color: #00aaff;
-}
+.sortable-ghost { background-color: #007bff; opacity: 0.4; }
+.sortable-chosen { background-color: #2a2a2a; }
+.section.sortable-ghost { background-color: #00aaff; }
 
 /* Modal Styles */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); justify-content: center; align-items: center; z-index: 1000; display: none; }
 .modal-overlay.visible { display: flex; }
 .modal-content { background-color: #2c2c2c; padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
-#notepad-modal .modal-content { max-width: 800px; } /* Wider scratchpad modal */
+#notepad-modal .modal-content { max-width: 800px; }
 .modal-content h2 { margin-top: 0; color: #00aaff;}
 .form-group { margin-bottom: 1rem; }
 .form-group label { display: block; margin-bottom: 0.5rem; }
@@ -283,7 +279,7 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
 /* Scratchpad Styles */
 #notepad-textarea {
     width: 100%;
-    height: 60vh; /* Taller textarea */
+    height: 60vh;
     background-color: #333;
     border: 1px solid #555;
     color: #eee;
@@ -293,35 +289,26 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
     box-sizing: border-box;
 }
 
-
 /* Drag Overlay Styles */
 #drag-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background-color: rgba(0, 170, 255, 0.2);
     border: 3px dashed #00aaff;
     box-sizing: border-box;
     z-index: 2000;
 }
 #drag-overlay .drag-overlay-content {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    height: 100%;
-    font-size: 2rem;
-    color: #e0e0e0;
+    display: flex; justify-content: center; align-items: center;
+    width: 100%; height: 100%; font-size: 2rem; color: #e0e0e0;
     text-shadow: 0 0 10px #121212;
 }
 
 /* Status Indicator Styles */
 #status-indicator-container {
-    flex-grow: 1; /* Allow it to take space */
+    flex-grow: 1;
     display: flex;
-    justify-content: center; /* Center the indicator */
+    justify-content: center;
+    min-width: 150px;
 }
 #status-indicator {
     padding: 0.5rem 1rem;
@@ -331,16 +318,11 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
     color: white;
     text-align: center;
     transition: background-color 0.3s;
+    white-space: nowrap;
 }
-#status-indicator.ok {
-    background-color: #28a745; /* Green */
-}
-#status-indicator.investigate {
-    background-color: #ff9800; /* Orange */
-}
-#status-indicator.error {
-    background-color: #dc3545; /* Red */
-}
+#status-indicator.ok { background-color: #28a745; }
+#status-indicator.investigate { background-color: #ff9800; }
+#status-indicator.error { background-color: #dc3545; }
 """
 
 DEFAULT_JS = """
@@ -941,27 +923,23 @@ def get_uptime_kuma_status():
     if not uk_url:
         return jsonify({"enabled": False})
 
-    # Ensure the URL is clean
     uk_url = uk_url.rstrip('/')
-    # The 'heartbeat' endpoint gives the most direct up/down status for all monitors
     heartbeat_api_url = f"{uk_url}/api/status-page/heartbeat/all-checks"
 
     try:
         response = requests.get(heartbeat_api_url, timeout=10)
-        response.raise_for_status()  # Raise an exception for bad status codes
+        response.raise_for_status()
         data = response.json()
 
-        overall_status = "ok" # Default to 'ok' (Green)
+        overall_status = "ok"
 
         heartbeat_list = data.get("heartbeatList", {})
         for monitor_id, heartbeats in heartbeat_list.items():
             if heartbeats:
-                # The first item in the list is the most recent status
                 latest_heartbeat = heartbeats[0]
-                # In Uptime Kuma, status 1 is "Up". Anything else (0=Down, etc.) is a problem.
                 if latest_heartbeat.get("status") != 1:
-                    overall_status = "investigate" # Set to 'investigate' (Orange)
-                    break # One failure is enough to change the overall status
+                    overall_status = "investigate"
+                    break
 
         return jsonify({
             "enabled": True,
@@ -982,5 +960,4 @@ def main():
 if __name__ == '__main__':
     main()
     print("--- Starting Flask development server ---")
-    # This block is for local development. Gunicorn is used in the Docker container.
     app.run(host='0.0.0.0', port=8000, debug=True)
