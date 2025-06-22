@@ -12,7 +12,7 @@ A clean, lightweight, and easy-to-use personal homepage application, designed to
 - **Drag & Drop**: Simply drag a URL from another browser tab and drop it onto the page to quickly add a new link.
 - **Customization**: Use the Settings modal to change the page title and set whether links open in a new tab.
 - **Persistent Storage**: All of your links and settings are stored in a Docker volume, so they persist through container updates and restarts.
-- **Scratchpad for quick note taking when you have nowhere else to drop something quickly or you want to be able to easily move it between devices.
+- **Scratchpad**: Use for quick note taking when you have nowhere else to drop something quickly or you want to be able to easily move it between devices.
 
 ## Running with Docker
 
