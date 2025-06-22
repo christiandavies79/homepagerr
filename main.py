@@ -1,6 +1,7 @@
 import os
 import json
 import shutil
+import requests
 from flask import Flask, send_from_directory, request, jsonify
 
 # --- Configuration ---
@@ -9,7 +10,7 @@ DATA_DIR = os.path.join(CONFIG_DIR, 'data')
 STATIC_DIR = os.path.join(CONFIG_DIR, 'static')
 LINKS_FILE = os.path.join(DATA_DIR, 'links.json')
 SETTINGS_FILE = os.path.join(DATA_DIR, 'settings.json')
-NOTES_FILE = os.path.join(DATA_DIR, 'notes.json') # New file for scratchpad
+NOTES_FILE = os.path.join(DATA_DIR, 'notes.json')
 
 # --- Default File Content ---
 DEFAULT_HTML = """
@@ -26,6 +27,7 @@ DEFAULT_HTML = """
     <div class="container">
         <header>
             <h1 id="page-title">My Homepage</h1>
+            <div id="status-indicator-container"></div>
             <div class="search-wrapper">
                 <input type="search" id="search-input" placeholder="Search links...">
             </div>
@@ -174,9 +176,10 @@ header {
     padding-bottom: 1rem;
     margin-bottom: 2rem;
     flex-wrap: wrap; /* Allow wrapping for search bar */
+    gap: 1rem; /* Add gap between header items */
 }
-header h1 { margin: 0; font-size: 1.8rem; }
-.search-wrapper { flex-grow: 1; margin: 0 1rem; }
+header h1 { margin: 0; font-size: 1.8rem; flex-shrink: 0; }
+.search-wrapper { flex-grow: 1; min-width: 200px; }
 #search-input {
     width: 100%;
     background-color: #333;
@@ -186,6 +189,7 @@ header h1 { margin: 0; font-size: 1.8rem; }
     border-radius: 4px;
     font-size: 1rem;
 }
+.controls { display: flex; flex-shrink: 0; }
 .controls button { background-color: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; margin-left: 0.5rem; }
 .controls button:hover { background-color: #0056b3; }
 .controls button#settings-button, .controls button#discard-button, .controls button#notepad-button { background-color: #6c757d; }
@@ -194,8 +198,8 @@ header h1 { margin: 0; font-size: 1.8rem; }
 .hidden { display: none; }
 .search-hidden { display: none !important; } /* High importance to override other styles */
 
-.section { 
-    margin-bottom: 2rem; 
+.section {
+    margin-bottom: 2rem;
     background-color: #1c1c1c;
     padding: 1rem;
     border-radius: 8px;
@@ -218,10 +222,10 @@ header h1 { margin: 0; font-size: 1.8rem; }
 .edit-mode .section {
     border: 1px dashed #555;
 }
-.edit-mode .section-header { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
+.edit-mode .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 .edit-mode .section-header-title {
     display: flex;
@@ -229,12 +233,12 @@ header h1 { margin: 0; font-size: 1.8rem; }
     flex-grow: 1;
 }
 .edit-mode input[type="text"] { background-color: #333; color: #eee; border: 1px solid #555; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; width: 100%; }
-.edit-mode .link-item { 
+.edit-mode .link-item {
     display: flex;
     align-items: center; /* Align handle with content */
-    background-color: #2a2a2a; 
-    padding: 0.5rem 1rem; 
-    border-radius: 5px; 
+    background-color: #2a2a2a;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
 }
 .edit-mode .link-item-content { flex-grow: 1; }
 .edit-mode .remove-btn { background-color: #dc3545; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; align-self: center; margin-left: 0.5rem; flex-shrink: 0; }
@@ -312,6 +316,31 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
     color: #e0e0e0;
     text-shadow: 0 0 10px #121212;
 }
+
+/* Status Indicator Styles */
+#status-indicator-container {
+    flex-grow: 1; /* Allow it to take space */
+    display: flex;
+    justify-content: center; /* Center the indicator */
+}
+#status-indicator {
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: white;
+    text-align: center;
+    transition: background-color 0.3s;
+}
+#status-indicator.ok {
+    background-color: #28a745; /* Green */
+}
+#status-indicator.investigate {
+    background-color: #ff9800; /* Orange */
+}
+#status-indicator.error {
+    background-color: #dc3545; /* Red */
+}
 """
 
 DEFAULT_JS = """
@@ -332,7 +361,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const discardButton = document.getElementById('discard-button');
     const linksContainer = document.getElementById('links-container');
     const settingsButton = document.getElementById('settings-button');
-    
+    const statusIndicatorContainer = document.getElementById('status-indicator-container');
+
     // Notepad Modal
     const notepadButton = document.getElementById('notepad-button');
     const notepadModal = document.getElementById('notepad-modal');
@@ -368,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const newSectionTitleInput = document.getElementById('new-section-title-input');
     const saveAddLinkButton = document.getElementById('save-add-link-button');
     const cancelAddLinkButton = document.getElementById('cancel-add-link-button');
-    
+
     // --- Data Fetching ---
     const fetchAllData = async () => {
         try {
@@ -379,12 +409,39 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!linksResponse.ok || !settingsResponse.ok) throw new Error('Network response was not ok');
             currentLinks = await linksResponse.json();
             currentSettings = await settingsResponse.json();
-            
+
             applySettings();
             renderLinks();
 
         } catch (error) {
             linksContainer.innerHTML = `<p style="color:red;">Error loading data: ${error.message}</p>`;
+        }
+    };
+
+    const fetchUptimeKumaStatus = async () => {
+        try {
+            const response = await fetch('/api/uptime-kuma-status');
+            const data = await response.json();
+
+            if (!data.enabled) {
+                statusIndicatorContainer.innerHTML = ''; // Do nothing if the feature is disabled
+                return;
+            }
+
+            let indicatorHTML = '';
+            if (data.status === 'ok') {
+                indicatorHTML = `<div id="status-indicator" class="ok" title="All services are online.">All Systems Online</div>`;
+            } else if (data.status === 'investigate') {
+                indicatorHTML = `<div id="status-indicator" class="investigate" title="One or more services requires attention.">Investigate Services</div>`;
+            } else { // Handles 'error' state
+                const errorMessage = data.message || 'Could not retrieve status.';
+                indicatorHTML = `<div id="status-indicator" class="error" title="${errorMessage}">Status Unavailable</div>`;
+            }
+            statusIndicatorContainer.innerHTML = indicatorHTML;
+
+        } catch (error) {
+            console.error('Error fetching Uptime Kuma status:', error);
+            statusIndicatorContainer.innerHTML = `<div id="status-indicator" class="error" title="Client-side error fetching status.">Status Unavailable</div>`;
         }
     };
 
@@ -402,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
         (currentLinks.sections || []).forEach((section) => {
             const sectionDiv = document.createElement('div');
             sectionDiv.className = 'section';
-            
+
             let sectionHeader;
             if (isEditMode) {
                 sectionHeader = `
@@ -446,7 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 linksUl.appendChild(li);
             });
-            
+
             if(isEditMode) {
                 const addLinkBtn = document.createElement('button');
                 addLinkBtn.textContent = 'Add Link';
@@ -463,7 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
              linksContainer.appendChild(addSectionBtn);
         }
     };
-    
+
     // --- Search Logic ---
     const handleSearch = () => {
         const searchTerm = searchInput.value.toLowerCase();
@@ -483,7 +540,7 @@ document.addEventListener('DOMContentLoaded', () => {
             section.classList.toggle('search-hidden', !sectionHasVisibleLink);
         });
     };
-    
+
     // --- Drag and Drop Sorting Logic ---
     const initializeSortable = () => {
         const sectionsContainer = document.getElementById('links-container');
@@ -598,9 +655,9 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error opening notepad:', error);
         }
     };
-    
+
     const closeNotepadModal = () => notepadModal.classList.remove('visible');
-    
+
     const saveNotepadChanges = async (content = null, andClose = false) => {
         const newContent = content !== null ? content : notepadTextarea.value;
         try {
@@ -617,7 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error saving notepad:', error);
         }
     };
-    
+
     // --- Add Link Modal Logic ---
     const openAddLinkModal = (url) => {
         addLinkForm.reset();
@@ -702,7 +759,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
+
     addDynamicEventListeners();
     searchInput.addEventListener('input', handleSearch);
     editButton.addEventListener('click', toggleEditMode);
@@ -711,7 +768,7 @@ document.addEventListener('DOMContentLoaded', () => {
     settingsButton.addEventListener('click', openSettingsModal);
     cancelSettingsButton.addEventListener('click', closeSettingsModal);
     saveSettingsButton.addEventListener('click', saveSettingsChanges);
-    
+
     // Notepad Listeners
     notepadButton.addEventListener('click', openNotepadModal);
     saveNotepadButton.addEventListener('click', () => saveNotepadChanges(null, true));
@@ -770,11 +827,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     cancelAddLinkButton.addEventListener('click', closeAddLinkModal);
     saveAddLinkButton.addEventListener('click', saveLinkFromModal);
-    
-    // Explicitly prevent closing modals by clicking outside them
-    // The event listeners for this have been removed.
 
+    // --- Initial Load ---
     fetchAllData();
+    fetchUptimeKumaStatus();
+
+    // --- Set up refresh interval ---
+    setInterval(fetchUptimeKumaStatus, 60000); // 60000ms = 1 minute
 });
 """
 
@@ -793,6 +852,7 @@ DEFAULT_SETTINGS = {
 
 
 def initialize_app():
+    """Ensures that all necessary directories and default configuration files are created."""
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(STATIC_DIR, exist_ok=True)
 
@@ -807,21 +867,21 @@ def initialize_app():
             print(f"Warning: Could not read settings file: {e}")
     else:
         with open(SETTINGS_FILE, 'w') as f: json.dump(DEFAULT_SETTINGS, f, indent=4)
-    
+
     files_to_create = {
         os.path.join(STATIC_DIR, 'index.html'): DEFAULT_HTML,
         os.path.join(STATIC_DIR, 'style.css'): DEFAULT_CSS,
         os.path.join(STATIC_DIR, 'scripts.js'): DEFAULT_JS
     }
-    
+
     for fpath, content in files_to_create.items():
         if not os.path.exists(fpath) or should_overwrite_static:
             print(f"Creating or overwriting '{os.path.basename(fpath)}'.")
-            with open(fpath, 'w') as f: f.write(content)
+            with open(fpath, 'w', encoding='utf-8') as f: f.write(content)
 
     if not os.path.exists(LINKS_FILE):
         with open(LINKS_FILE, 'w') as f: json.dump(DEFAULT_LINKS, f, indent=4)
-    
+
     if not os.path.exists(NOTES_FILE):
         with open(NOTES_FILE, 'w') as f: json.dump(DEFAULT_NOTES, f, indent=4)
 
@@ -831,27 +891,32 @@ app = Flask(__name__, static_url_path='/static', static_folder=STATIC_DIR)
 
 @app.route('/')
 def index():
+    """Serves the main index.html file."""
     return send_from_directory(STATIC_DIR, 'index.html')
-    
+
 @app.route('/health')
 def health_check():
+    """Provides a simple health check endpoint."""
     return jsonify({"status": "ok"}), 200
 
 def get_json_file(file_path):
+    """Helper function to read and serve a JSON file."""
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             return jsonify(json.load(f))
     except Exception as e:
         return jsonify({"error": f"Could not read file: {e}"}), 500
 
 def save_json_file(file_path):
+    """Helper function to save JSON data from a request to a file."""
     try:
-        with open(file_path, 'w') as f:
+        with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(request.get_json(), f, indent=4)
         return jsonify({"message": "Saved"}), 200
     except Exception as e:
         return jsonify({"error": f"Failed to save file: {e}"}), 500
 
+# --- API Routes ---
 @app.route('/api/links', methods=['GET'])
 def get_links(): return get_json_file(LINKS_FILE)
 @app.route('/api/links', methods=['POST'])
@@ -867,7 +932,49 @@ def get_notes(): return get_json_file(NOTES_FILE)
 @app.route('/api/notes', methods=['POST'])
 def save_notes(): return save_json_file(NOTES_FILE)
 
+@app.route('/api/uptime-kuma-status')
+def get_uptime_kuma_status():
+    """
+    Fetches the status from an Uptime Kuma instance if the UK_URL env var is set.
+    """
+    uk_url = os.environ.get('UK_URL')
+    if not uk_url:
+        return jsonify({"enabled": False})
+
+    # Ensure the URL is clean
+    uk_url = uk_url.rstrip('/')
+    # The 'heartbeat' endpoint gives the most direct up/down status for all monitors
+    heartbeat_api_url = f"{uk_url}/api/status-page/heartbeat/all-checks"
+
+    try:
+        response = requests.get(heartbeat_api_url, timeout=10)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        data = response.json()
+
+        overall_status = "ok" # Default to 'ok' (Green)
+
+        heartbeat_list = data.get("heartbeatList", {})
+        for monitor_id, heartbeats in heartbeat_list.items():
+            if heartbeats:
+                # The first item in the list is the most recent status
+                latest_heartbeat = heartbeats[0]
+                # In Uptime Kuma, status 1 is "Up". Anything else (0=Down, etc.) is a problem.
+                if latest_heartbeat.get("status") != 1:
+                    overall_status = "investigate" # Set to 'investigate' (Orange)
+                    break # One failure is enough to change the overall status
+
+        return jsonify({
+            "enabled": True,
+            "status": overall_status
+        })
+
+    except requests.exceptions.RequestException as e:
+        return jsonify({"enabled": True, "status": "error", "message": f"Could not connect to Uptime Kuma: {e}"}), 500
+    except Exception as e:
+        return jsonify({"enabled": True, "status": "error", "message": f"An unexpected error occurred: {e}"}), 500
+
 def main():
+    """Main function to run initialization."""
     print("--- Running initialization ---")
     initialize_app()
     print("--- Initialization complete ---")
@@ -875,4 +982,5 @@ def main():
 if __name__ == '__main__':
     main()
     print("--- Starting Flask development server ---")
+    # This block is for local development. Gunicorn is used in the Docker container.
     app.run(host='0.0.0.0', port=8000, debug=True)
