@@ -53,8 +53,23 @@ DEFAULT_HTML = """
             <h2>Scratchpad</h2>
             <textarea id="notepad-textarea" placeholder="Type your notes here..."></textarea>
             <div class="modal-actions">
+                <button id="delete-all-notes-button" class="button-danger">Delete All</button>
+                <div style="flex-grow: 1;"></div> <!-- Spacer -->
                 <button id="discard-notepad-button">Discard Changes</button>
                 <button id="save-notepad-button">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-confirm-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Delete All Notes?</h2>
+            <p>This action cannot be undone.</p>
+            <div class="modal-actions">
+                <button id="confirm-delete-cancel">Cancel</button>
+                <button id="confirm-delete-all" class="button-danger">Delete All</button>
+                <button id="confirm-delete-all-close" class="button-danger">Delete All & Close</button>
             </div>
         </div>
     </div>
@@ -253,8 +268,10 @@ header h1 { margin: 0; font-size: 1.8rem; }
 .form-group label { display: block; margin-bottom: 0.5rem; }
 .form-group input[type="text"], .form-group input[type="number"], .form-group select { width: 100%; box-sizing: border-box; background-color: #333; border: 1px solid #555; color: #eee; padding: 0.5rem; border-radius: 4px;}
 .form-group input[type="checkbox"] { margin-right: 0.5rem; width: auto; }
-.modal-actions { margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem; }
+.modal-actions { margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem; align-items: center; }
 .modal-actions button { background-color: #6c757d; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 5px; cursor: pointer; }
+.modal-actions button.button-danger { background-color: #dc3545; }
+.modal-actions button.button-danger:hover { background-color: #c82333; }
 .modal-actions button#save-settings-button, .modal-actions button#save-add-link-button, .modal-actions button#save-notepad-button { background-color: #007bff; }
 hr { border: 1px solid #444; margin: 1.5rem 0;}
 .warning-text { color: #ffc107; }
@@ -322,6 +339,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const notepadTextarea = document.getElementById('notepad-textarea');
     const saveNotepadButton = document.getElementById('save-notepad-button');
     const discardNotepadButton = document.getElementById('discard-notepad-button');
+    const deleteAllNotesButton = document.getElementById('delete-all-notes-button');
+
+    // Delete Confirm Modal
+    const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+    const confirmDeleteCancelButton = document.getElementById('confirm-delete-cancel');
+    const confirmDeleteAllButton = document.getElementById('confirm-delete-all');
+    const confirmDeleteAllCloseButton = document.getElementById('confirm-delete-all-close');
+
 
     // Settings Modal
     const settingsModal = document.getElementById('settings-modal');
@@ -576,15 +601,18 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const closeNotepadModal = () => notepadModal.classList.remove('visible');
     
-    const saveNotepadChanges = async () => {
-        const newContent = notepadTextarea.value;
+    const saveNotepadChanges = async (content = null, andClose = false) => {
+        const newContent = content !== null ? content : notepadTextarea.value;
         try {
             const response = await fetch('/api/notes', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: newContent })
             });
             if (!response.ok) throw new Error('Failed to save notes');
             currentNotepadContent = newContent;
-            closeNotepadModal();
+            notepadTextarea.value = newContent;
+            if (andClose) {
+                closeNotepadModal();
+            }
         } catch (error) {
             console.error('Error saving notepad:', error);
         }
@@ -684,13 +712,27 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelSettingsButton.addEventListener('click', closeSettingsModal);
     saveSettingsButton.addEventListener('click', saveSettingsChanges);
     
+    // Notepad Listeners
     notepadButton.addEventListener('click', openNotepadModal);
-    saveNotepadButton.addEventListener('click', saveNotepadChanges);
+    saveNotepadButton.addEventListener('click', () => saveNotepadChanges(null, true));
     discardNotepadButton.addEventListener('click', () => {
         notepadTextarea.value = currentNotepadContent;
         closeNotepadModal();
     });
+    deleteAllNotesButton.addEventListener('click', () => deleteConfirmModal.classList.add('visible'));
 
+    // Delete Confirmation Listeners
+    confirmDeleteCancelButton.addEventListener('click', () => deleteConfirmModal.classList.remove('visible'));
+    confirmDeleteAllButton.addEventListener('click', () => {
+        saveNotepadChanges('', false);
+        deleteConfirmModal.classList.remove('visible');
+    });
+    confirmDeleteAllCloseButton.addEventListener('click', () => {
+        saveNotepadChanges('', true);
+        deleteConfirmModal.classList.remove('visible');
+    });
+
+    // Drag and Drop Listeners
     let dragCounter = 0;
     window.addEventListener('dragenter', (e) => {
         e.preventDefault();
@@ -722,16 +764,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Add Link Modal Listeners
     linkSectionSelect.addEventListener('change', () => {
         newSectionGroup.classList.toggle('hidden', linkSectionSelect.value !== '--new-section--');
     });
     cancelAddLinkButton.addEventListener('click', closeAddLinkModal);
     saveAddLinkButton.addEventListener('click', saveLinkFromModal);
     
-    // Make only the add link modal close on overlay click
-    addLinkModal.addEventListener('click', (e) => {
-        if (e.target === addLinkModal) e.target.classList.remove('visible');
-    });
+    // Explicitly prevent closing modals by clicking outside them
+    // The event listeners for this have been removed.
 
     fetchAllData();
 });
