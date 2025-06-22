@@ -13,6 +13,7 @@ A clean, lightweight, and easy-to-use personal homepage application, designed to
 - **Customization**: Use the Settings modal to change the page title and set whether links open in a new tab.
 - **Persistent Storage**: All of your links and settings are stored in a Docker volume, so they persist through container updates and restarts.
 - **Automated Builds**: Pushes to `main` automatically build and push the `:latest` image to Docker Hub. Pushes to any other branch (e.g., `test`) build the `:test` image.
+- **Scratchpad for quick note taking when you have nowhere else to drop something quickly or you want to be able to easily move it between devices.
 
 ## Running with Docker
 
