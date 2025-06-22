@@ -311,11 +311,8 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
     justify-content: center;
     min-width: 150px;
 }
-#status-indicator-container a {
-    text-decoration: none;
-    color: inherit;
-}
 #status-indicator {
+    display: block;
     padding: 0.5rem 1rem;
     border-radius: 5px;
     font-size: 0.9rem;
@@ -324,6 +321,11 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
     text-align: center;
     transition: background-color 0.3s;
     white-space: nowrap;
+    text-decoration: none;
+}
+#status-indicator:hover {
+    color: white; /* Maintain text color on hover */
+    filter: brightness(110%);
 }
 #status-indicator.ok { background-color: #28a745; }
 #status-indicator.investigate { background-color: #ff9800; }
@@ -412,26 +414,39 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (!data.enabled) {
-                statusIndicatorContainer.innerHTML = ''; // Do nothing if the feature is disabled
+                statusIndicatorContainer.innerHTML = '';
                 return;
             }
 
-            let indicatorHTML = '';
-            if (data.status === 'ok') {
-                indicatorHTML = `<div id="status-indicator" class="ok" title="All services are online.">All Systems Online</div>`;
-            } else if (data.status === 'investigate') {
-                indicatorHTML = `<div id="status-indicator" class="investigate" title="One or more services requires attention.">Investigate Services</div>`;
-            } else { // Handles 'error' state
-                const errorMessage = data.message || 'Could not retrieve status.';
-                indicatorHTML = `<div id="status-indicator" class="error" title="${errorMessage}">Status Unavailable</div>`;
+            let indicator;
+            if (data.url) {
+                indicator = document.createElement('a');
+                indicator.href = data.url;
+                indicator.target = '_blank';
+                indicator.rel = 'noopener noreferrer';
+            } else {
+                indicator = document.createElement('div');
             }
 
-            // If the URL is provided, wrap the indicator in a clickable link
-            if (data.url) {
-                statusIndicatorContainer.innerHTML = `<a href="${data.url}" target="_blank" rel="noopener noreferrer">${indicatorHTML}</a>`;
-            } else {
-                statusIndicatorContainer.innerHTML = indicatorHTML;
+            indicator.id = 'status-indicator';
+            
+            if (data.status === 'ok') {
+                indicator.className = 'ok';
+                indicator.title = 'All services are online.';
+                indicator.textContent = 'All Systems Online';
+            } else if (data.status === 'investigate') {
+                indicator.className = 'investigate';
+                indicator.title = 'One or more services requires attention.';
+                indicator.textContent = 'Investigate Services';
+            } else { // Handles 'error' state
+                indicator.className = 'error';
+                const errorMessage = data.message || 'Could not retrieve status.';
+                indicator.title = errorMessage;
+                indicator.textContent = 'Status Unavailable';
             }
+            
+            statusIndicatorContainer.innerHTML = ''; // Clear previous indicator
+            statusIndicatorContainer.appendChild(indicator);
 
         } catch (error) {
             console.error('Error fetching Uptime Kuma status:', error);
@@ -613,10 +628,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Settings Modal Logic ---
     const openSettingsModal = () => {
-        pageTitleInput.value = currentSettings.pageTitle;
+        pageTitleInput.value = currentSettings.pageTitle || 'My Homepage';
         newTabCheckbox.checked = currentSettings.openLinksInNewTab;
-        linkColumnsInput.value = currentSettings.linkColumns;
-        overwriteStaticCheckbox.checked = false; // Always default to false
+        linkColumnsInput.value = currentSettings.linkColumns || 2;
+        overwriteStaticCheckbox.checked = currentSettings.forceOverwriteStaticFiles || false;
         settingsModal.classList.add('visible');
     };
 
@@ -876,13 +891,9 @@ def initialize_app():
                 settings = json.load(f)
                 if settings.get('forceOverwriteStaticFiles', False):
                     should_overwrite_static = True
-                    print("Setting 'forceOverwriteStaticFiles' is true. Static files will be overwritten.", flush=True)
-                    # Set it back to false after overwriting to prevent re-running
-                    settings['forceOverwriteStaticFiles'] = False
-                    with open(SETTINGS_FILE, 'w') as fw:
-                        json.dump(settings, fw, indent=4)
+                    log_message("Setting 'forceOverwriteStaticFiles' is true. Static files will be overwritten.")
         except (json.JSONDecodeError, IOError) as e:
-            print(f"Warning: Could not read settings file: {e}", flush=True)
+            log_message(f"Warning: Could not read settings file during init: {e}")
     else:
         with open(SETTINGS_FILE, 'w') as f: json.dump(DEFAULT_SETTINGS, f, indent=4)
 
@@ -894,7 +905,7 @@ def initialize_app():
 
     for fpath, content in files_to_create.items():
         if not os.path.exists(fpath) or should_overwrite_static:
-            print(f"Creating or overwriting '{os.path.basename(fpath)}'.", flush=True)
+            log_message(f"Creating or overwriting '{os.path.basename(fpath)}'.")
             with open(fpath, 'w', encoding='utf-8') as f: f.write(content)
 
     if not os.path.exists(LINKS_FILE):
@@ -988,15 +999,11 @@ def get_uptime_kuma_status():
         
         for monitor_id, heartbeats in heartbeat_list.items():
             if heartbeats:
-                # CORRECTED LOGIC: Sort the list of heartbeats by time, descending.
-                # The timestamp format is ISO-like and sorts correctly as a string.
                 heartbeats.sort(key=lambda x: x.get('time', ''), reverse=True)
                 
-                # Now the first item is guaranteed to be the most recent.
                 latest_heartbeat = heartbeats[0]
                 latest_status = latest_heartbeat.get("status")
                 
-                # In Uptime Kuma, status 1 is "Up". Others (0=Down, 2=Pending) are problem states.
                 if latest_status != 1:
                     overall_status = "investigate"
                     log_message(f"[Uptime Kuma] !! Monitor '{monitor_id}' triggered 'investigate' state with status '{latest_status}'. Halting checks.")
