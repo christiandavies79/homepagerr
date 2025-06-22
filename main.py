@@ -978,27 +978,27 @@ def get_uptime_kuma_status():
         
         for monitor_id, heartbeats in heartbeat_list.items():
             if heartbeats:
-                # The first item in the list is the most recent heartbeat.
+                # CORRECTED LOGIC: Sort the list of heartbeats by time, descending.
+                # The timestamp format is ISO-like and sorts correctly as a string.
+                heartbeats.sort(key=lambda x: x.get('time', ''), reverse=True)
+                
+                # Now the first item is guaranteed to be the most recent.
                 latest_heartbeat = heartbeats[0]
                 latest_status = latest_heartbeat.get("status")
                 
-                # Check if the status is an integer, if not, it's a problem state
                 if not isinstance(latest_status, int):
                     log_message(f"[Uptime Kuma] Monitor '{monitor_id}' has non-integer status: {latest_status}")
                     overall_status = "investigate"
                     log_message(f"[Uptime Kuma] !! Problem state detected. Full heartbeat data: {latest_heartbeat}")
                     break
 
-                # In Uptime Kuma, status 1 is "Up". Others (0=Down, 2=Pending) are problem states.
                 if latest_status != 1:
                     overall_status = "investigate"
                     log_message(f"[Uptime Kuma] !! Monitor '{monitor_id}' triggered 'investigate' state with status '{latest_status}'. Halting checks.")
                     log_message(f"[Uptime Kuma] !! Failing heartbeat data: {latest_heartbeat}")
-                    break # A single failure is enough to change the overall status
+                    break 
                 else:
-                    # Only log healthy statuses if you need extreme verbosity
-                    # log_message(f"[Uptime Kuma] Monitor '{monitor_id}' latest status is OK (1)")
-                    pass
+                    log_message(f"[Uptime Kuma] Monitor '{monitor_id}' latest status is OK (1)")
             else:
                 log_message(f"[Uptime Kuma] Warning: Monitor '{monitor_id}' has an empty heartbeat list.")
 
