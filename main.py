@@ -9,6 +9,7 @@ DATA_DIR = os.path.join(CONFIG_DIR, 'data')
 STATIC_DIR = os.path.join(CONFIG_DIR, 'static')
 LINKS_FILE = os.path.join(DATA_DIR, 'links.json')
 SETTINGS_FILE = os.path.join(DATA_DIR, 'settings.json')
+NOTES_FILE = os.path.join(DATA_DIR, 'notes.json') # New file for scratchpad
 
 # --- Default File Content ---
 DEFAULT_HTML = """
@@ -29,6 +30,12 @@ DEFAULT_HTML = """
                 <input type="search" id="search-input" placeholder="Search links...">
             </div>
             <div class="controls">
+                <button id="notepad-button" title="Scratchpad">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 1.5A1.5 1.5 0 0 1 9.5 0H11a.5.5 0 0 1 .5.5v2A1.5 1.5 0 0 1 10 4H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9.5a1.5 1.5 0 0 1 3 0V14a3 3 0 0 1-3 3H4a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h1.5a2.5 2.5 0 0 1 2.5 2.5V6h1.5A1.5 1.5 0 0 1 10 4.5z"/>
+                        <path d="M12.5 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5zM12 3.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5"/>
+                    </svg>
+                </button>
                 <button id="settings-button">Settings</button>
                 <button id="edit-button">Edit Links</button>
                 <button id="discard-button" class="hidden">Discard</button>
@@ -39,6 +46,19 @@ DEFAULT_HTML = """
             <!-- Links will be dynamically loaded here -->
         </main>
     </div>
+
+    <!-- Scratchpad Modal -->
+    <div id="notepad-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Scratchpad</h2>
+            <textarea id="notepad-textarea" placeholder="Type your notes here..."></textarea>
+            <div class="modal-actions">
+                <button id="discard-notepad-button">Discard Changes</button>
+                <button id="save-notepad-button">Save</button>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Drag Overlay -->
     <div id="drag-overlay" class="hidden">
@@ -153,8 +173,9 @@ header h1 { margin: 0; font-size: 1.8rem; }
 }
 .controls button { background-color: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; margin-left: 0.5rem; }
 .controls button:hover { background-color: #0056b3; }
-.controls button#settings-button, .controls button#discard-button { background-color: #6c757d; }
-.controls button#settings-button:hover, .controls button#discard-button:hover { background-color: #5a6268; }
+.controls button#settings-button, .controls button#discard-button, .controls button#notepad-button { background-color: #6c757d; }
+.controls button#settings-button:hover, .controls button#discard-button:hover, .controls button#notepad-button:hover { background-color: #5a6268; }
+.controls button#notepad-button { padding: 0.5rem 0.75rem; } /* Tweak padding for icon */
 .hidden { display: none; }
 .search-hidden { display: none !important; } /* High importance to override other styles */
 
@@ -233,9 +254,23 @@ header h1 { margin: 0; font-size: 1.8rem; }
 .form-group input[type="checkbox"] { margin-right: 0.5rem; width: auto; }
 .modal-actions { margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem; }
 .modal-actions button { background-color: #6c757d; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 5px; cursor: pointer; }
-.modal-actions button#save-settings-button, .modal-actions button#save-add-link-button { background-color: #007bff; }
+.modal-actions button#save-settings-button, .modal-actions button#save-add-link-button, .modal-actions button#save-notepad-button { background-color: #007bff; }
 hr { border: 1px solid #444; margin: 1.5rem 0;}
 .warning-text { color: #ffc107; }
+
+/* Scratchpad Styles */
+#notepad-textarea {
+    width: 100%;
+    height: 300px;
+    background-color: #333;
+    border: 1px solid #555;
+    color: #eee;
+    padding: 0.5rem;
+    border-radius: 4px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
 
 /* Drag Overlay Styles */
 #drag-overlay {
@@ -247,7 +282,7 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
     background-color: rgba(0, 170, 255, 0.2);
     border: 3px dashed #00aaff;
     box-sizing: border-box;
-    z-index: 2000; /* Must be on top of everything */
+    z-index: 2000;
 }
 #drag-overlay .drag-overlay-content {
     display: flex;
@@ -268,6 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentLinks = {};
     let currentSettings = {};
     let sortableInstances = [];
+    let currentNotepadContent = '';
 
     // --- DOM Elements ---
     const root = document.documentElement;
@@ -279,6 +315,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const linksContainer = document.getElementById('links-container');
     const settingsButton = document.getElementById('settings-button');
     
+    // Notepad Modal
+    const notepadButton = document.getElementById('notepad-button');
+    const notepadModal = document.getElementById('notepad-modal');
+    const notepadTextarea = document.getElementById('notepad-textarea');
+    const saveNotepadButton = document.getElementById('save-notepad-button');
+    const discardNotepadButton = document.getElementById('discard-notepad-button');
+
     // Settings Modal
     const settingsModal = document.getElementById('settings-modal');
     const saveSettingsButton = document.getElementById('save-settings-button');
@@ -288,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const linkColumnsInput = document.getElementById('link-columns-input');
     const overwriteStaticCheckbox = document.getElementById('overwrite-static-checkbox');
 
-    // Drag and Drop Modal
+    // Add Link Modal
     const addLinkModal = document.getElementById('add-link-modal');
     const dragOverlay = document.getElementById('drag-overlay');
     const addLinkForm = document.getElementById('add-link-form');
@@ -300,7 +343,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveAddLinkButton = document.getElementById('save-add-link-button');
     const cancelAddLinkButton = document.getElementById('cancel-add-link-button');
     
-
     // --- Data Fetching ---
     const fetchAllData = async () => {
         try {
@@ -331,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
         linksContainer.innerHTML = '';
         const linkTarget = currentSettings.openLinksInNewTab ? '_blank' : '_self';
 
-        (currentLinks.sections || []).forEach((section, sectionIndex) => {
+        (currentLinks.sections || []).forEach((section) => {
             const sectionDiv = document.createElement('div');
             sectionDiv.className = 'section';
             
@@ -353,7 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const linksUl = document.createElement('ul');
             linksUl.className = 'links';
-            sectionDiv.appendChild(linksUl); // Append before populating for SortableJS
+            sectionDiv.appendChild(linksUl);
 
             (section.links || []).forEach((link) => {
                 const li = document.createElement('li');
@@ -409,9 +451,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const url = link.getAttribute('data-url');
                     const isVisible = name.includes(searchTerm) || url.includes(searchTerm);
                     item.classList.toggle('search-hidden', !isVisible);
-                    if (isVisible) {
-                        sectionHasVisibleLink = true;
-                    }
+                    if (isVisible) sectionHasVisibleLink = true;
                 }
             });
             section.classList.toggle('search-hidden', !sectionHasVisibleLink);
@@ -420,27 +460,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Drag and Drop Sorting Logic ---
     const initializeSortable = () => {
-        // Sort sections
         const sectionsContainer = document.getElementById('links-container');
-        const sectionSortable = new Sortable(sectionsContainer, {
-            group: 'sections',
-            animation: 150,
-            handle: '.section-drag-handle',
-            ghostClass: 'sortable-ghost',
-        });
-        sortableInstances.push(sectionSortable);
-
-        // Sort links within each section
-        const lists = document.querySelectorAll('.links');
-        lists.forEach(list => {
-            const linkSortable = new Sortable(list, {
-                group: 'links',
-                animation: 150,
-                handle: '.link-drag-handle',
-                ghostClass: 'sortable-ghost',
-                chosenClass: 'sortable-chosen',
-            });
-            sortableInstances.push(linkSortable);
+        sortableInstances.push(new Sortable(sectionsContainer, {
+            group: 'sections', animation: 150, handle: '.section-drag-handle', ghostClass: 'sortable-ghost',
+        }));
+        document.querySelectorAll('.links').forEach(list => {
+            sortableInstances.push(new Sortable(list, {
+                group: 'links', animation: 150, handle: '.link-drag-handle', ghostClass: 'sortable-ghost',
+            }));
         });
     };
 
@@ -452,10 +479,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Edit Mode Logic ---
     const toggleEditMode = () => {
         isEditMode = !isEditMode;
-        destroySortable(); // Always destroy first
+        destroySortable();
         document.body.classList.toggle('edit-mode', isEditMode);
         editButton.classList.toggle('hidden', isEditMode);
         settingsButton.classList.toggle('hidden', isEditMode);
+        notepadButton.classList.toggle('hidden', isEditMode);
         saveButton.classList.toggle('hidden', !isEditMode);
         discardButton.classList.toggle('hidden', !isEditMode);
         searchInput.disabled = isEditMode;
@@ -464,25 +492,18 @@ document.addEventListener('DOMContentLoaded', () => {
             handleSearch();
         }
         renderLinks();
-        if (isEditMode) {
-            initializeSortable();
-        }
+        if (isEditMode) initializeSortable();
     };
 
     const saveAllLinkChanges = async (newLinkData) => {
         try {
             const response = await fetch('/api/links', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newLinkData)
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newLinkData)
             });
             if (!response.ok) throw new Error('Failed to save link changes');
             currentLinks = newLinkData;
-            if (isEditMode) {
-                toggleEditMode();
-            } else {
-                renderLinks();
-            }
+            if (isEditMode) toggleEditMode();
+            else renderLinks();
         } catch (error) {
             console.error('Error saving links:', error);
         }
@@ -493,9 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.section').forEach(sectionDiv => {
             const titleInput = sectionDiv.querySelector('.section-title-input');
             if (!titleInput) return;
-            
             const newSection = { title: titleInput.value, links: [] };
-            
             sectionDiv.querySelectorAll('.link-item').forEach(linkItem => {
                 const nameInput = linkItem.querySelector('.link-name-input');
                 const urlInput = linkItem.querySelector('.link-url-input');
@@ -505,7 +524,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             newSections.push(newSection);
         });
-        
         saveAllLinkChanges({ sections: newSections });
     };
 
@@ -518,9 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsModal.classList.add('visible');
     };
 
-    const closeSettingsModal = () => {
-        settingsModal.classList.remove('visible');
-    };
+    const closeSettingsModal = () => settingsModal.classList.remove('visible');
 
     const saveSettingsChanges = async () => {
         const newSettings = {
@@ -531,9 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         try {
             const response = await fetch('/api/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newSettings)
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newSettings)
             });
             if (!response.ok) throw new Error('Failed to save settings');
             currentSettings = newSettings;
@@ -544,25 +558,49 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error saving settings:', error);
         }
     };
+
+    // --- Scratchpad Modal Logic ---
+    const openNotepadModal = async () => {
+        try {
+            const response = await fetch('/api/notes');
+            if (!response.ok) throw new Error('Failed to fetch notes');
+            const data = await response.json();
+            currentNotepadContent = data.content;
+            notepadTextarea.value = currentNotepadContent;
+            notepadModal.classList.add('visible');
+        } catch (error) {
+            console.error('Error opening notepad:', error);
+        }
+    };
     
-    // --- Drag and Drop Modal Logic ---
+    const closeNotepadModal = () => notepadModal.classList.remove('visible');
+    
+    const saveNotepadChanges = async () => {
+        const newContent = notepadTextarea.value;
+        try {
+            const response = await fetch('/api/notes', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: newContent })
+            });
+            if (!response.ok) throw new Error('Failed to save notes');
+            currentNotepadContent = newContent;
+            closeNotepadModal();
+        } catch (error) {
+            console.error('Error saving notepad:', error);
+        }
+    };
+    
+    // --- Add Link Modal Logic ---
     const openAddLinkModal = (url) => {
         addLinkForm.reset();
         newSectionGroup.classList.add('hidden');
         linkUrlInput.value = url;
-
         let urlForParsing = url;
-        if (!urlForParsing.startsWith('http://') && !urlForParsing.startsWith('https://')) {
-            urlForParsing = 'http://' + urlForParsing;
-        }
-
+        if (!urlForParsing.startsWith('http')) urlForParsing = 'http://' + urlForParsing;
         try {
-            const parsedUrl = new URL(urlForParsing);
-            linkNameInput.value = parsedUrl.hostname.replace(/^www\\./, '');
+            linkNameInput.value = new URL(urlForParsing).hostname.replace(/^www./, '');
         } catch (e) {
             linkNameInput.value = url;
         }
-        
         linkSectionSelect.innerHTML = '';
         currentLinks.sections.forEach((section, index) => {
             const option = document.createElement('option');
@@ -574,52 +612,35 @@ document.addEventListener('DOMContentLoaded', () => {
         newSectionOption.value = '--new-section--';
         newSectionOption.textContent = 'Create a new section...';
         linkSectionSelect.appendChild(newSectionOption);
-
         addLinkModal.classList.add('visible');
     };
 
-    const closeAddLinkModal = () => {
-        addLinkModal.classList.remove('visible');
-    };
+    const closeAddLinkModal = () => addLinkModal.classList.remove('visible');
 
     const saveLinkFromModal = () => {
         const name = linkNameInput.value.trim();
         const url = linkUrlInput.value.trim();
         const sectionChoice = linkSectionSelect.value;
         const newSectionTitle = newSectionTitleInput.value.trim();
-
-        if (!name || !url) {
-            console.error('Link Name and URL cannot be empty.');
-            return;
-        }
-
+        if (!name || !url) return;
         const newLink = { name, url };
         let updatedLinks = JSON.parse(JSON.stringify(currentLinks));
-
         if (sectionChoice === '--new-section--') {
-            if (!newSectionTitle) {
-                console.error('New section title cannot be empty.');
-                return;
-            }
+            if (!newSectionTitle) return;
             updatedLinks.sections.push({ title: newSectionTitle, links: [newLink] });
         } else {
-            const sectionIndex = parseInt(sectionChoice, 10);
-            updatedLinks.sections[sectionIndex].links.push(newLink);
+            updatedLinks.sections[parseInt(sectionChoice, 10)].links.push(newLink);
         }
-
         saveAllLinkChanges(updatedLinks);
         closeAddLinkModal();
     };
 
-    // --- Event Listeners ---
+    // --- Event Listener Setup ---
     function addDynamicEventListeners() {
         linksContainer.addEventListener('click', (e) => {
             if (e.target.matches('.remove-btn')) {
-                const linkItem = e.target.closest('.link-item');
-                if (linkItem) linkItem.remove();
-
-                const sectionItem = e.target.closest('.section');
-                if (e.target.matches('.remove-section-btn')) sectionItem.remove();
+                if (e.target.matches('.remove-link-btn')) e.target.closest('.link-item').remove();
+                if (e.target.matches('.remove-section-btn')) e.target.closest('.section').remove();
             }
             if (e.target.matches('.add-link-btn')) {
                 const linksUl = e.target.parentElement.querySelector('.links');
@@ -628,11 +649,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 newLinkLi.innerHTML = `
                     <span class="drag-handle link-drag-handle">☰</span>
                     <div class="link-item-content">
-                        <input type="text" placeholder="Name" class="link-name-input">
-                        <input type="text" placeholder="URL" class="link-url-input">
+                        <input type="text" placeholder="Name"><input type="text" placeholder="URL">
                     </div>
-                    <button class="remove-btn remove-link-btn">X</button>
-                `;
+                    <button class="remove-btn remove-link-btn">X</button>`;
                 linksUl.appendChild(newLinkLi);
             }
             if(e.target.matches('.add-section-btn')) {
@@ -655,134 +674,98 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // --- Static Event Listeners Setup ---
     addDynamicEventListeners();
     searchInput.addEventListener('input', handleSearch);
-
     editButton.addEventListener('click', toggleEditMode);
     saveButton.addEventListener('click', saveLinkChangesFromEditMode);
     discardButton.addEventListener('click', toggleEditMode);
-    
     settingsButton.addEventListener('click', openSettingsModal);
     cancelSettingsButton.addEventListener('click', closeSettingsModal);
     saveSettingsButton.addEventListener('click', saveSettingsChanges);
-    settingsModal.addEventListener('click', (e) => {
-        if (e.target === settingsModal) closeSettingsModal();
+    notepadButton.addEventListener('click', openNotepadModal);
+    saveNotepadButton.addEventListener('click', saveNotepadChanges);
+    discardNotepadButton.addEventListener('click', () => {
+        notepadTextarea.value = currentNotepadContent; // Revert changes
+        closeNotepadModal();
     });
 
-    // --- Drag and Drop Listeners ---
     let dragCounter = 0;
     window.addEventListener('dragenter', (e) => {
         e.preventDefault();
-        const isLink = e.dataTransfer.types.includes('text/uri-list') || e.dataTransfer.types.includes('text/plain');
-        if (isLink && !isEditMode) {
+        if (!isEditMode && (e.dataTransfer.types.includes('text/uri-list') || e.dataTransfer.types.includes('text/plain'))) {
             dragCounter++;
             dragOverlay.classList.remove('hidden');
         }
     });
-
     window.addEventListener('dragleave', (e) => {
         e.preventDefault();
         dragCounter--;
-        if (dragCounter === 0) {
-            dragOverlay.classList.add('hidden');
-        }
+        if (dragCounter === 0) dragOverlay.classList.add('hidden');
     });
-
-    window.addEventListener('dragover', (e) => {
-        e.preventDefault();
-    });
-
+    window.addEventListener('dragover', (e) => e.preventDefault());
     window.addEventListener('drop', (e) => {
         e.preventDefault();
         if (isEditMode) return;
         dragCounter = 0;
         dragOverlay.classList.add('hidden');
-
         const droppedText = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
         if (!droppedText) return;
-
         let urlToTest = droppedText.trim();
-        if (!urlToTest.startsWith('http://') && !urlToTest.startsWith('https://')) {
-            urlToTest = 'http://' + urlToTest;
-        }
-
+        if (!urlToTest.startsWith('http')) urlToTest = 'http://' + urlToTest;
         try {
             new URL(urlToTest);
             openAddLinkModal(droppedText.trim());
         } catch (err) {
-            console.warn('Dropped item is not a valid URL:', droppedText);
+            console.warn('Dropped item not a valid URL:', droppedText);
         }
     });
 
-    // Add Link Modal Listeners
     linkSectionSelect.addEventListener('change', () => {
-        if (linkSectionSelect.value === '--new-section--') {
-            newSectionGroup.classList.remove('hidden');
-        } else {
-            newSectionGroup.classList.add('hidden');
-        }
+        newSectionGroup.classList.toggle('hidden', linkSectionSelect.value !== '--new-section--');
     });
     cancelAddLinkButton.addEventListener('click', closeAddLinkModal);
     saveAddLinkButton.addEventListener('click', saveLinkFromModal);
-    addLinkModal.addEventListener('click', (e) => {
-        if (e.target === addLinkModal) closeAddLinkModal();
+    
+    [addLinkModal, settingsModal, notepadModal].forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) e.target.classList.remove('visible');
+        });
     });
 
-    // --- Initial Load ---
     fetchAllData();
 });
 """
 
+DEFAULT_NOTES = {"content": ""}
+
 DEFAULT_LINKS = {
     "sections": [
-        {
-            "title": "Getting Started",
-            "links": [
-                {"name": "Edit Links", "url": "#"},
-                {"name": "Google", "url": "https://google.com"}
-            ]
-        },
-        {
-            "title": "News",
-            "links": [
-                {"name": "Hacker News", "url": "https://news.ycombinator.com"},
-                {"name": "Reddit", "url": "https://reddit.com"}
-            ]
-        }
+        { "title": "Getting Started", "links": [ {"name": "Edit Links", "url": "#"}, {"name": "Google", "url": "https://google.com"} ] },
+        { "title": "News", "links": [ {"name": "Hacker News", "url": "https://news.ycombinator.com"}, {"name": "Reddit", "url": "https://reddit.com"} ] }
     ]
 }
 
 DEFAULT_SETTINGS = {
-    "pageTitle": "My Homepage",
-    "openLinksInNewTab": True,
-    "linkColumns": 2,
-    "forceOverwriteStaticFiles": False
+    "pageTitle": "My Homepage", "openLinksInNewTab": True, "linkColumns": 2, "forceOverwriteStaticFiles": False
 }
 
 
 def initialize_app():
-    """Checks for required files and directories, creating or overwriting them based on settings."""
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(STATIC_DIR, exist_ok=True)
 
-    # --- Settings File Handling ---
     should_overwrite_static = False
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, 'r') as f:
-                existing_settings = json.load(f)
-            if existing_settings.get('forceOverwriteStaticFiles', False):
-                should_overwrite_static = True
-                print("Setting 'forceOverwriteStaticFiles' is true. Static files will be overwritten.")
+                if json.load(f).get('forceOverwriteStaticFiles', False):
+                    should_overwrite_static = True
+                    print("Setting 'forceOverwriteStaticFiles' is true. Static files will be overwritten.")
         except (json.JSONDecodeError, IOError) as e:
-            print(f"Warning: Could not read settings file, defaulting to not overwrite. Error: {e}")
+            print(f"Warning: Could not read settings file: {e}")
     else:
-        print(f"'{SETTINGS_FILE}' not found, creating with default content.")
-        with open(SETTINGS_FILE, 'w') as f:
-            json.dump(DEFAULT_SETTINGS, f, indent=4)
+        with open(SETTINGS_FILE, 'w') as f: json.dump(DEFAULT_SETTINGS, f, indent=4)
     
-    # --- Static File Handling ---
     files_to_create = {
         os.path.join(STATIC_DIR, 'index.html'): DEFAULT_HTML,
         os.path.join(STATIC_DIR, 'style.css'): DEFAULT_CSS,
@@ -792,14 +775,13 @@ def initialize_app():
     for fpath, content in files_to_create.items():
         if not os.path.exists(fpath) or should_overwrite_static:
             print(f"Creating or overwriting '{os.path.basename(fpath)}'.")
-            with open(fpath, 'w') as f:
-                f.write(content)
+            with open(fpath, 'w') as f: f.write(content)
 
-    # --- Links File Handling ---
     if not os.path.exists(LINKS_FILE):
-        print(f"'{LINKS_FILE}' not found, creating with default content.")
-        with open(LINKS_FILE, 'w') as f:
-            json.dump(DEFAULT_LINKS, f, indent=4)
+        with open(LINKS_FILE, 'w') as f: json.dump(DEFAULT_LINKS, f, indent=4)
+    
+    if not os.path.exists(NOTES_FILE):
+        with open(NOTES_FILE, 'w') as f: json.dump(DEFAULT_NOTES, f, indent=4)
 
 
 # --- App Definition ---
@@ -813,53 +795,42 @@ def index():
 def health_check():
     return jsonify({"status": "ok"}), 200
 
-@app.route('/api/links', methods=['GET'])
-def get_links():
+def get_json_file(file_path):
     try:
-        with open(LINKS_FILE, 'r') as f:
-            data = json.load(f)
-        return jsonify(data)
+        with open(file_path, 'r') as f:
+            return jsonify(json.load(f))
     except Exception as e:
-        return jsonify({"error": f"Could not read links file: {e}"}), 500
+        return jsonify({"error": f"Could not read file: {e}"}), 500
 
-@app.route('/api/links', methods=['POST'])
-def save_links():
+def save_json_file(file_path):
     try:
-        new_data = request.get_json()
-        with open(LINKS_FILE, 'w') as f:
-            json.dump(new_data, f, indent=4)
-        return jsonify({"message": "Links saved"}), 200
+        with open(file_path, 'w') as f:
+            json.dump(request.get_json(), f, indent=4)
+        return jsonify({"message": "Saved"}), 200
     except Exception as e:
-        return jsonify({"error": f"Failed to save links: {e}"}), 500
+        return jsonify({"error": f"Failed to save file: {e}"}), 500
+
+@app.route('/api/links', methods=['GET'])
+def get_links(): return get_json_file(LINKS_FILE)
+@app.route('/api/links', methods=['POST'])
+def save_links(): return save_json_file(LINKS_FILE)
 
 @app.route('/api/settings', methods=['GET'])
-def get_settings():
-    try:
-        with open(SETTINGS_FILE, 'r') as f:
-            data = json.load(f)
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": f"Could not read settings file: {e}"}), 500
-
+def get_settings(): return get_json_file(SETTINGS_FILE)
 @app.route('/api/settings', methods=['POST'])
-def save_settings():
-    try:
-        new_data = request.get_json()
-        with open(SETTINGS_FILE, 'w') as f:
-            json.dump(new_data, f, indent=4)
-        return jsonify({"message": "Settings saved"}), 200
-    except Exception as e:
-        return jsonify({"error": f"Failed to save settings: {e}"}), 500
+def save_settings(): return save_json_file(SETTINGS_FILE)
 
-# This function will be called by the startup script.
+@app.route('/api/notes', methods=['GET'])
+def get_notes(): return get_json_file(NOTES_FILE)
+@app.route('/api/notes', methods=['POST'])
+def save_notes(): return save_json_file(NOTES_FILE)
+
 def main():
     print("--- Running initialization ---")
     initialize_app()
     print("--- Initialization complete ---")
 
-# This block is for direct execution (e.g. `python main.py`)
 if __name__ == '__main__':
     main()
-    # This part is for local development and won't be used by Gunicorn
     print("--- Starting Flask development server ---")
     app.run(host='0.0.0.0', port=8000, debug=True)
