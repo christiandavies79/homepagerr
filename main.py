@@ -221,7 +221,7 @@ header h1 { margin: 0; font-size: 1.8rem; flex-shrink: 0; white-space: nowrap; }
     height: 36px;
     padding: 0;
 }
-.hidden { display: none; }
+.hidden { display: none !important; }
 .search-hidden { display: none !important; }
 
 .section {
@@ -338,6 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const root = document.documentElement;
     const pageTitleElement = document.getElementById('page-title');
     const searchInput = document.getElementById('search-input');
+    const searchWrapper = document.querySelector('.search-wrapper');
     const editButton = document.getElementById('edit-button');
     const saveButton = document.getElementById('save-button');
     const discardButton = document.getElementById('discard-button');
@@ -544,20 +545,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Edit Mode Logic ---
     const toggleEditMode = () => {
         isEditMode = !isEditMode;
-        destroySortable();
         document.body.classList.toggle('edit-mode', isEditMode);
-        editButton.classList.toggle('hidden', isEditMode);
+
+        // Toggle visibility of header controls based on edit mode
+        searchWrapper.classList.toggle('hidden', isEditMode);
         settingsButton.classList.toggle('hidden', isEditMode);
         notepadButton.classList.toggle('hidden', isEditMode);
+        editButton.classList.toggle('hidden', isEditMode);
         saveButton.classList.toggle('hidden', !isEditMode);
         discardButton.classList.toggle('hidden', !isEditMode);
-        searchInput.disabled = isEditMode;
-        if (!isEditMode) {
+        
+        destroySortable();
+        renderLinks(); // Re-render the links to apply/remove edit controls
+        
+        if (isEditMode) {
+            initializeSortable();
+        } else {
+            // Clear search when exiting edit mode
             searchInput.value = '';
             handleSearch();
         }
-        renderLinks();
-        if (isEditMode) initializeSortable();
     };
 
     const saveAllLinkChanges = async (newLinkData) => {
@@ -567,8 +574,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (!response.ok) throw new Error('Failed to save link changes');
             currentLinks = newLinkData;
-            if (isEditMode) toggleEditMode();
-            else renderLinks();
+            toggleEditMode(); // This will exit edit mode and re-render
         } catch (error) {
             console.error('Error saving links:', error);
         }
@@ -578,7 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newSections = [];
         document.querySelectorAll('.section').forEach(sectionDiv => {
             const titleInput = sectionDiv.querySelector('.section-title-input');
-            if (!titleInput) return;
+            if (!titleInput) return; // Should not happen in edit mode
             const newSection = { title: titleInput.value, links: [] };
             sectionDiv.querySelectorAll('.link-item').forEach(linkItem => {
                 const nameInput = linkItem.querySelector('.link-name-input');
@@ -617,7 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error('Failed to save settings');
             currentSettings = newSettings;
             applySettings();
-            renderLinks();
+            renderLinks(); // Re-render links in case columns changed
             closeSettingsModal();
         } catch (error) {
             console.error('Error saving settings:', error);
@@ -746,7 +752,9 @@ document.addEventListener('DOMContentLoaded', () => {
     searchInput.addEventListener('input', handleSearch);
     editButton.addEventListener('click', toggleEditMode);
     saveButton.addEventListener('click', saveLinkChangesFromEditMode);
-    discardButton.addEventListener('click', toggleEditMode);
+    discardButton.addEventListener('click', () => {
+        toggleEditMode(); // Simply exit edit mode without saving
+    });
     settingsButton.addEventListener('click', openSettingsModal);
     cancelSettingsButton.addEventListener('click', closeSettingsModal);
     saveSettingsButton.addEventListener('click', saveSettingsChanges);
@@ -842,9 +850,14 @@ def initialize_app():
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, 'r') as f:
-                if json.load(f).get('forceOverwriteStaticFiles', False):
+                settings = json.load(f)
+                if settings.get('forceOverwriteStaticFiles', False):
                     should_overwrite_static = True
                     print("Setting 'forceOverwriteStaticFiles' is true. Static files will be overwritten.")
+                    # Set it back to false after overwriting
+                    settings['forceOverwriteStaticFiles'] = False
+                    with open(SETTINGS_FILE, 'w') as fw:
+                        json.dump(settings, fw, indent=4)
         except (json.JSONDecodeError, IOError) as e:
             print(f"Warning: Could not read settings file: {e}")
     else:
@@ -892,27 +905,34 @@ def get_json_file(file_path):
 def save_json_file(file_path):
     """Helper function to save JSON data from a request to a file."""
     try:
+        data = request.get_json()
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(request.get_json(), f, indent=4)
+            json.dump(data, f, indent=4)
         return jsonify({"message": "Saved"}), 200
     except Exception as e:
         return jsonify({"error": f"Failed to save file: {e}"}), 500
 
 # --- API Routes ---
-@app.route('/api/links', methods=['GET'])
-def get_links(): return get_json_file(LINKS_FILE)
-@app.route('/api/links', methods=['POST'])
-def save_links(): return save_json_file(LINKS_FILE)
+@app.route('/api/links', methods=['GET', 'POST'])
+def handle_links():
+    if request.method == 'POST':
+        return save_json_file(LINKS_FILE)
+    else:
+        return get_json_file(LINKS_FILE)
 
-@app.route('/api/settings', methods=['GET'])
-def get_settings(): return get_json_file(SETTINGS_FILE)
-@app.route('/api/settings', methods=['POST'])
-def save_settings(): return save_json_file(SETTINGS_FILE)
+@app.route('/api/settings', methods=['GET', 'POST'])
+def handle_settings():
+    if request.method == 'POST':
+        return save_json_file(SETTINGS_FILE)
+    else:
+        return get_json_file(SETTINGS_FILE)
 
-@app.route('/api/notes', methods=['GET'])
-def get_notes(): return get_json_file(NOTES_FILE)
-@app.route('/api/notes', methods=['POST'])
-def save_notes(): return save_json_file(NOTES_FILE)
+@app.route('/api/notes', methods=['GET', 'POST'])
+def handle_notes():
+    if request.method == 'POST':
+        return save_json_file(NOTES_FILE)
+    else:
+        return get_json_file(NOTES_FILE)
 
 @app.route('/api/uptime-kuma-status')
 def get_uptime_kuma_status():
@@ -936,10 +956,13 @@ def get_uptime_kuma_status():
         heartbeat_list = data.get("heartbeatList", {})
         for monitor_id, heartbeats in heartbeat_list.items():
             if heartbeats:
+                # The first item in the list is the most recent status
                 latest_heartbeat = heartbeats[0]
+                # In Uptime Kuma, status 1 is "Up". Status 0 is "Down", 2 is "Pending".
+                # Any status other than 1 is considered a problem state.
                 if latest_heartbeat.get("status") != 1:
                     overall_status = "investigate"
-                    break
+                    break # A single failure is enough to change the overall status
 
         return jsonify({
             "enabled": True,
