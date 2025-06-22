@@ -19,6 +19,7 @@ DEFAULT_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Homepage</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -166,6 +167,7 @@ header h1 { margin: 0; font-size: 1.8rem; }
     /* This variable will be set by JavaScript based on settings */
     grid-template-columns: repeat(var(--link-columns, 2), 1fr);
     gap: 1rem;
+    min-height: 50px; /* Give a drop target for empty lists */
 }
 .links a { color: #8ab4f8; text-decoration: none; font-size: 1.1em; }
 .links a:hover { text-decoration: underline; }
@@ -173,9 +175,31 @@ header h1 { margin: 0; font-size: 1.8rem; }
 /* Edit Mode Styles */
 .edit-mode .section-header { display: flex; justify-content: space-between; align-items: center; }
 .edit-mode input[type="text"] { background-color: #333; color: #eee; border: 1px solid #555; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; width: calc(100% - 1.2rem); }
-.edit-mode .link-item { display: flex; flex-direction: column; background-color: #2a2a2a; padding: 1rem; border-radius: 5px; }
-.edit-mode .remove-btn { background-color: #dc3545; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; align-self: flex-end; }
+.edit-mode .link-item { 
+    display: flex;
+    align-items: center; /* Align handle with content */
+    background-color: #2a2a2a; 
+    padding: 0.5rem 1rem; 
+    border-radius: 5px; 
+}
+.edit-mode .link-item-content { flex-grow: 1; }
+.edit-mode .remove-btn { background-color: #dc3545; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; align-self: center; margin-left: 0.5rem; }
 .edit-mode .add-btn { background-color: #28a745; color: white; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer; margin-top: 0.5rem; }
+.drag-handle {
+    cursor: grab;
+    color: #888;
+    margin-right: 10px;
+    font-size: 1.2rem;
+    line-height: 1;
+}
+.drag-handle:active { cursor: grabbing; }
+.sortable-ghost {
+    background-color: #007bff;
+    opacity: 0.4;
+}
+.sortable-chosen {
+    background-color: #2a2a2a; /* Keep original background when chosen */
+}
 
 /* Modal Styles */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); justify-content: center; align-items: center; z-index: 1000; display: none; }
@@ -222,6 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isEditMode = false;
     let currentLinks = {};
     let currentSettings = {};
+    let sortableInstances = [];
 
     // --- DOM Elements ---
     const root = document.documentElement;
@@ -301,13 +326,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 li.className = 'link-item';
                 if (isEditMode) {
-                    li.innerHTML = `<input type="text" placeholder="Name" value="${link.name}" class="link-name-input" data-section-index="${sectionIndex}" data-link-index="${linkIndex}"><input type="text" placeholder="URL" value="${link.url}" class="link-url-input" data-section-index="${sectionIndex}" data-link-index="${linkIndex}"><button class="remove-btn remove-link-btn" data-section-index="${sectionIndex}" data-link-index="${linkIndex}">X</button>`;
+                    li.innerHTML = `
+                        <span class="drag-handle">☰</span>
+                        <div class="link-item-content">
+                            <input type="text" placeholder="Name" value="${link.name}" class="link-name-input">
+                            <input type="text" placeholder="URL" value="${link.url}" class="link-url-input">
+                        </div>
+                        <button class="remove-btn remove-link-btn">X</button>
+                    `;
                 } else {
                     const linkAnchor = document.createElement('a');
                     linkAnchor.href = link.url;
                     linkAnchor.target = linkTarget;
                     linkAnchor.textContent = link.name;
-                    // Add data attributes for searching
                     linkAnchor.setAttribute('data-name', link.name.toLowerCase());
                     linkAnchor.setAttribute('data-url', link.url.toLowerCase());
                     li.appendChild(linkAnchor);
@@ -355,21 +386,45 @@ document.addEventListener('DOMContentLoaded', () => {
             section.classList.toggle('search-hidden', !sectionHasVisibleLink);
         });
     };
+    
+    // --- Drag and Drop Sorting Logic ---
+    const initializeSortable = () => {
+        const lists = document.querySelectorAll('.links');
+        lists.forEach(list => {
+            const sortable = new Sortable(list, {
+                group: 'links', // set both lists to same group
+                animation: 150,
+                handle: '.drag-handle', // Restricts sort start click/touch to the specified element
+                ghostClass: 'sortable-ghost', // Class name for the drop placeholder
+                chosenClass: 'sortable-chosen', // Class name for the chosen item
+            });
+            sortableInstances.push(sortable);
+        });
+    };
+
+    const destroySortable = () => {
+        sortableInstances.forEach(instance => instance.destroy());
+        sortableInstances = [];
+    };
 
     // --- Edit Mode Logic ---
     const toggleEditMode = () => {
         isEditMode = !isEditMode;
+        destroySortable(); // Always destroy first
         document.body.classList.toggle('edit-mode', isEditMode);
         editButton.classList.toggle('hidden', isEditMode);
         settingsButton.classList.toggle('hidden', isEditMode);
         saveButton.classList.toggle('hidden', !isEditMode);
         discardButton.classList.toggle('hidden', !isEditMode);
-        searchInput.disabled = isEditMode; // Disable search in edit mode
+        searchInput.disabled = isEditMode;
         if (!isEditMode) {
-            searchInput.value = ''; // Clear search on exiting edit mode
-            handleSearch(); // Reset view
+            searchInput.value = '';
+            handleSearch();
         }
         renderLinks();
+        if (isEditMode) {
+            initializeSortable();
+        }
     };
 
     const saveAllLinkChanges = async (newLinkData) => {
@@ -391,14 +446,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- Save button from Edit Mode ---
     const saveLinkChangesFromEditMode = () => {
-        const sections = [];
+        const newSections = [];
         document.querySelectorAll('.section').forEach(sectionDiv => {
             const titleInput = sectionDiv.querySelector('.section-title-input');
-            if (!titleInput) return;
+            if (!titleInput) return; // Skip if somehow a section has no title input (e.g. during render)
             
             const newSection = { title: titleInput.value, links: [] };
+            
             sectionDiv.querySelectorAll('.link-item').forEach(linkItem => {
                 const nameInput = linkItem.querySelector('.link-name-input');
                 const urlInput = linkItem.querySelector('.link-url-input');
@@ -406,9 +461,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     newSection.links.push({ name: nameInput.value, url: urlInput.value });
                 }
             });
-            sections.push(newSection);
+            newSections.push(newSection);
         });
-        saveAllLinkChanges({ sections });
+        
+        saveAllLinkChanges({ sections: newSections });
     };
 
     // --- Settings Modal Logic ---
@@ -516,13 +572,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners ---
     function addDynamicEventListeners() {
         linksContainer.addEventListener('click', (e) => {
-            if (e.target.matches('.remove-link-btn')) e.target.closest('.link-item').remove();
-            if (e.target.matches('.remove-section-btn')) e.target.closest('.section').remove();
+            if (e.target.matches('.remove-btn')) { // Simplified selector
+                const linkItem = e.target.closest('.link-item');
+                if (linkItem) linkItem.remove();
+
+                const sectionItem = e.target.closest('.section');
+                if (e.target.matches('.remove-section-btn')) sectionItem.remove();
+            }
             if (e.target.matches('.add-link-btn')) {
                 const linksUl = e.target.previousElementSibling;
                 const newLinkLi = document.createElement('li');
                 newLinkLi.className = 'link-item';
-                newLinkLi.innerHTML = `<input type="text" placeholder="Name" class="link-name-input"><input type="text" placeholder="URL" class="link-url-input"><button class="remove-btn remove-link-btn">X</button>`;
+                newLinkLi.innerHTML = `
+                    <span class="drag-handle">☰</span>
+                    <div class="link-item-content">
+                        <input type="text" placeholder="Name" class="link-name-input">
+                        <input type="text" placeholder="URL" class="link-url-input">
+                    </div>
+                    <button class="remove-btn remove-link-btn">X</button>
+                `;
                 linksUl.appendChild(newLinkLi);
             }
             if(e.target.matches('.add-section-btn')) {
@@ -530,6 +598,9 @@ document.addEventListener('DOMContentLoaded', () => {
                  newSectionDiv.className = 'section';
                  newSectionDiv.innerHTML = `<div class="section-header"><input type="text" value="New Section" class="section-title-input"><button class="remove-btn remove-section-btn">X</button></div><ul class="links"></ul><button class="add-btn add-link-btn">Add Link</button>`;
                  linksContainer.insertBefore(newSectionDiv, e.target);
+                 // Make the new list sortable
+                 destroySortable();
+                 initializeSortable();
             }
         });
     }
@@ -554,7 +625,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('dragenter', (e) => {
         e.preventDefault();
         const isLink = e.dataTransfer.types.includes('text/uri-list') || e.dataTransfer.types.includes('text/plain');
-        if (isLink && !isEditMode) { // Only show overlay if not in edit mode
+        if (isLink && !isEditMode) {
             dragCounter++;
             dragOverlay.classList.remove('hidden');
         }
