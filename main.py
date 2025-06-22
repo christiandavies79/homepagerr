@@ -33,7 +33,7 @@ DEFAULT_HTML = """
                 <button id="notepad-button" title="Scratchpad">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                         <path d="M8 1.5A1.5 1.5 0 0 1 9.5 0H11a.5.5 0 0 1 .5.5v2A1.5 1.5 0 0 1 10 4H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9.5a1.5 1.5 0 0 1 3 0V14a3 3 0 0 1-3 3H4a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h1.5a2.5 2.5 0 0 1 2.5 2.5V6h1.5A1.5 1.5 0 0 1 10 4.5z"/>
-                        <path d="M12.5 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5zM12 3.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5"/>
+                        <path d="M12.5 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5-.5h-2a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5zM12 3.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5"/>
                     </svg>
                 </button>
                 <button id="settings-button">Settings</button>
@@ -247,6 +247,7 @@ header h1 { margin: 0; font-size: 1.8rem; }
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); justify-content: center; align-items: center; z-index: 1000; display: none; }
 .modal-overlay.visible { display: flex; }
 .modal-content { background-color: #2c2c2c; padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+#notepad-modal .modal-content { max-width: 800px; } /* Wider scratchpad modal */
 .modal-content h2 { margin-top: 0; color: #00aaff;}
 .form-group { margin-bottom: 1rem; }
 .form-group label { display: block; margin-bottom: 0.5rem; }
@@ -261,7 +262,7 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
 /* Scratchpad Styles */
 #notepad-textarea {
     width: 100%;
-    height: 300px;
+    height: 60vh; /* Taller textarea */
     background-color: #333;
     border: 1px solid #555;
     color: #eee;
@@ -682,10 +683,11 @@ document.addEventListener('DOMContentLoaded', () => {
     settingsButton.addEventListener('click', openSettingsModal);
     cancelSettingsButton.addEventListener('click', closeSettingsModal);
     saveSettingsButton.addEventListener('click', saveSettingsChanges);
+    
     notepadButton.addEventListener('click', openNotepadModal);
     saveNotepadButton.addEventListener('click', saveNotepadChanges);
     discardNotepadButton.addEventListener('click', () => {
-        notepadTextarea.value = currentNotepadContent; // Revert changes
+        notepadTextarea.value = currentNotepadContent;
         closeNotepadModal();
     });
 
@@ -716,7 +718,7 @@ document.addEventListener('DOMContentLoaded', () => {
             new URL(urlToTest);
             openAddLinkModal(droppedText.trim());
         } catch (err) {
-            console.warn('Dropped item not a valid URL:', droppedText);
+            console.warn('Dropped item is not a valid URL:', droppedText);
         }
     });
 
@@ -726,10 +728,9 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelAddLinkButton.addEventListener('click', closeAddLinkModal);
     saveAddLinkButton.addEventListener('click', saveLinkFromModal);
     
-    [addLinkModal, settingsModal, notepadModal].forEach(modal => {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) e.target.classList.remove('visible');
-        });
+    // Make only the add link modal close on overlay click
+    addLinkModal.addEventListener('click', (e) => {
+        if (e.target === addLinkModal) e.target.classList.remove('visible');
     });
 
     fetchAllData();
