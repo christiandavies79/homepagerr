@@ -158,7 +158,13 @@ header h1 { margin: 0; font-size: 1.8rem; }
 .hidden { display: none; }
 .search-hidden { display: none !important; } /* High importance to override other styles */
 
-.section { margin-bottom: 2rem; }
+.section { 
+    margin-bottom: 2rem; 
+    background-color: #1c1c1c;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+}
 .section h2 { color: #00aaff; border-bottom: 1px solid #444; padding-bottom: 0.5rem; margin-bottom: 1rem; }
 .links {
     list-style: none;
@@ -173,8 +179,20 @@ header h1 { margin: 0; font-size: 1.8rem; }
 .links a:hover { text-decoration: underline; }
 
 /* Edit Mode Styles */
-.edit-mode .section-header { display: flex; justify-content: space-between; align-items: center; }
-.edit-mode input[type="text"] { background-color: #333; color: #eee; border: 1px solid #555; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; width: calc(100% - 1.2rem); }
+.edit-mode .section {
+    border: 1px dashed #555;
+}
+.edit-mode .section-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+}
+.edit-mode .section-header-title {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+}
+.edit-mode input[type="text"] { background-color: #333; color: #eee; border: 1px solid #555; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; width: 100%; }
 .edit-mode .link-item { 
     display: flex;
     align-items: center; /* Align handle with content */
@@ -183,7 +201,7 @@ header h1 { margin: 0; font-size: 1.8rem; }
     border-radius: 5px; 
 }
 .edit-mode .link-item-content { flex-grow: 1; }
-.edit-mode .remove-btn { background-color: #dc3545; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; align-self: center; margin-left: 0.5rem; }
+.edit-mode .remove-btn { background-color: #dc3545; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; align-self: center; margin-left: 0.5rem; flex-shrink: 0; }
 .edit-mode .add-btn { background-color: #28a745; color: white; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer; margin-top: 0.5rem; }
 .drag-handle {
     cursor: grab;
@@ -200,6 +218,9 @@ header h1 { margin: 0; font-size: 1.8rem; }
 .sortable-chosen {
     background-color: #2a2a2a; /* Keep original background when chosen */
 }
+.section.sortable-ghost {
+    background-color: #00aaff;
+}
 
 /* Modal Styles */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); justify-content: center; align-items: center; z-index: 1000; display: none; }
@@ -208,7 +229,7 @@ header h1 { margin: 0; font-size: 1.8rem; }
 .modal-content h2 { margin-top: 0; color: #00aaff;}
 .form-group { margin-bottom: 1rem; }
 .form-group label { display: block; margin-bottom: 0.5rem; }
-.form-group input[type="text"], .form-group input[type="number"], .form-group select { width: 100%; background-color: #333; border: 1px solid #555; color: #eee; padding: 0.5rem; border-radius: 4px;}
+.form-group input[type="text"], .form-group input[type="number"], .form-group select { width: 100%; box-sizing: border-box; background-color: #333; border: 1px solid #555; color: #eee; padding: 0.5rem; border-radius: 4px;}
 .form-group input[type="checkbox"] { margin-right: 0.5rem; width: auto; }
 .modal-actions { margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem; }
 .modal-actions button { background-color: #6c757d; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 5px; cursor: pointer; }
@@ -314,20 +335,32 @@ document.addEventListener('DOMContentLoaded', () => {
             const sectionDiv = document.createElement('div');
             sectionDiv.className = 'section';
             
-            let sectionHeaderHTML = isEditMode
-                ? `<div class="section-header"><input type="text" value="${section.title}" class="section-title-input" data-section-index="${sectionIndex}"><button class="remove-btn remove-section-btn" data-section-index="${sectionIndex}">X</button></div>`
-                : `<h2>${section.title}</h2>`;
-            sectionDiv.innerHTML = sectionHeaderHTML;
+            let sectionHeader;
+            if (isEditMode) {
+                sectionHeader = `
+                    <div class="section-header">
+                        <div class="section-header-title">
+                           <span class="drag-handle section-drag-handle">☰</span>
+                           <input type="text" value="${section.title}" class="section-title-input">
+                        </div>
+                        <button class="remove-btn remove-section-btn">X</button>
+                    </div>`;
+            } else {
+                sectionHeader = `<h2>${section.title}</h2>`;
+            }
+            sectionDiv.innerHTML = sectionHeader;
+
 
             const linksUl = document.createElement('ul');
             linksUl.className = 'links';
+            sectionDiv.appendChild(linksUl); // Append before populating for SortableJS
 
-            (section.links || []).forEach((link, linkIndex) => {
+            (section.links || []).forEach((link) => {
                 const li = document.createElement('li');
                 li.className = 'link-item';
                 if (isEditMode) {
                     li.innerHTML = `
-                        <span class="drag-handle">☰</span>
+                        <span class="drag-handle link-drag-handle">☰</span>
                         <div class="link-item-content">
                             <input type="text" placeholder="Name" value="${link.name}" class="link-name-input">
                             <input type="text" placeholder="URL" value="${link.url}" class="link-url-input">
@@ -345,13 +378,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 linksUl.appendChild(li);
             });
-            sectionDiv.appendChild(linksUl);
             
             if(isEditMode) {
                 const addLinkBtn = document.createElement('button');
                 addLinkBtn.textContent = 'Add Link';
                 addLinkBtn.className = 'add-btn add-link-btn';
-                addLinkBtn.dataset.sectionIndex = sectionIndex;
                 sectionDiv.appendChild(addLinkBtn);
             }
             linksContainer.appendChild(sectionDiv);
@@ -389,16 +420,27 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Drag and Drop Sorting Logic ---
     const initializeSortable = () => {
+        // Sort sections
+        const sectionsContainer = document.getElementById('links-container');
+        const sectionSortable = new Sortable(sectionsContainer, {
+            group: 'sections',
+            animation: 150,
+            handle: '.section-drag-handle',
+            ghostClass: 'sortable-ghost',
+        });
+        sortableInstances.push(sectionSortable);
+
+        // Sort links within each section
         const lists = document.querySelectorAll('.links');
         lists.forEach(list => {
-            const sortable = new Sortable(list, {
-                group: 'links', // set both lists to same group
+            const linkSortable = new Sortable(list, {
+                group: 'links',
                 animation: 150,
-                handle: '.drag-handle', // Restricts sort start click/touch to the specified element
-                ghostClass: 'sortable-ghost', // Class name for the drop placeholder
-                chosenClass: 'sortable-chosen', // Class name for the chosen item
+                handle: '.link-drag-handle',
+                ghostClass: 'sortable-ghost',
+                chosenClass: 'sortable-chosen',
             });
-            sortableInstances.push(sortable);
+            sortableInstances.push(linkSortable);
         });
     };
 
@@ -450,7 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newSections = [];
         document.querySelectorAll('.section').forEach(sectionDiv => {
             const titleInput = sectionDiv.querySelector('.section-title-input');
-            if (!titleInput) return; // Skip if somehow a section has no title input (e.g. during render)
+            if (!titleInput) return;
             
             const newSection = { title: titleInput.value, links: [] };
             
@@ -572,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners ---
     function addDynamicEventListeners() {
         linksContainer.addEventListener('click', (e) => {
-            if (e.target.matches('.remove-btn')) { // Simplified selector
+            if (e.target.matches('.remove-btn')) {
                 const linkItem = e.target.closest('.link-item');
                 if (linkItem) linkItem.remove();
 
@@ -580,11 +622,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (e.target.matches('.remove-section-btn')) sectionItem.remove();
             }
             if (e.target.matches('.add-link-btn')) {
-                const linksUl = e.target.previousElementSibling;
+                const linksUl = e.target.parentElement.querySelector('.links');
                 const newLinkLi = document.createElement('li');
                 newLinkLi.className = 'link-item';
                 newLinkLi.innerHTML = `
-                    <span class="drag-handle">☰</span>
+                    <span class="drag-handle link-drag-handle">☰</span>
                     <div class="link-item-content">
                         <input type="text" placeholder="Name" class="link-name-input">
                         <input type="text" placeholder="URL" class="link-url-input">
@@ -596,9 +638,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if(e.target.matches('.add-section-btn')) {
                  const newSectionDiv = document.createElement('div');
                  newSectionDiv.className = 'section';
-                 newSectionDiv.innerHTML = `<div class="section-header"><input type="text" value="New Section" class="section-title-input"><button class="remove-btn remove-section-btn">X</button></div><ul class="links"></ul><button class="add-btn add-link-btn">Add Link</button>`;
+                 newSectionDiv.innerHTML = `
+                    <div class="section-header">
+                        <div class="section-header-title">
+                           <span class="drag-handle section-drag-handle">☰</span>
+                           <input type="text" value="New Section" class="section-title-input">
+                        </div>
+                        <button class="remove-btn remove-section-btn">X</button>
+                    </div>
+                    <ul class="links"></ul>
+                    <button class="add-btn add-link-btn">Add Link</button>`;
                  linksContainer.insertBefore(newSectionDiv, e.target);
-                 // Make the new list sortable
                  destroySortable();
                  initializeSortable();
             }
@@ -758,6 +808,10 @@ app = Flask(__name__, static_url_path='/static', static_folder=STATIC_DIR)
 @app.route('/')
 def index():
     return send_from_directory(STATIC_DIR, 'index.html')
+    
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "ok"}), 200
 
 @app.route('/api/links', methods=['GET'])
 def get_links():
