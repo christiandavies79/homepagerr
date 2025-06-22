@@ -311,6 +311,10 @@ hr { border: 1px solid #444; margin: 1.5rem 0;}
     justify-content: center;
     min-width: 150px;
 }
+#status-indicator-container a {
+    text-decoration: none;
+    color: inherit;
+}
 #status-indicator {
     padding: 0.5rem 1rem;
     border-radius: 5px;
@@ -421,7 +425,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const errorMessage = data.message || 'Could not retrieve status.';
                 indicatorHTML = `<div id="status-indicator" class="error" title="${errorMessage}">Status Unavailable</div>`;
             }
-            statusIndicatorContainer.innerHTML = indicatorHTML;
+
+            // If the URL is provided, wrap the indicator in a clickable link
+            if (data.url) {
+                statusIndicatorContainer.innerHTML = `<a href="${data.url}" target="_blank" rel="noopener noreferrer">${indicatorHTML}</a>`;
+            } else {
+                statusIndicatorContainer.innerHTML = indicatorHTML;
+            }
 
         } catch (error) {
             console.error('Error fetching Uptime Kuma status:', error);
@@ -958,8 +968,8 @@ def get_uptime_kuma_status():
     if not uk_url:
         return jsonify({"enabled": False})
 
-    uk_url = uk_url.rstrip('/')
-    heartbeat_api_url = f"{uk_url}/api/status-page/heartbeat/all-checks"
+    clean_uk_url = uk_url.rstrip('/')
+    heartbeat_api_url = f"{clean_uk_url}/api/status-page/heartbeat/all-checks"
 
     log_message("\n--- [Uptime Kuma] Starting status fetch ---")
     log_message(f"[Uptime Kuma] Requesting URL: {heartbeat_api_url}")
@@ -986,12 +996,7 @@ def get_uptime_kuma_status():
                 latest_heartbeat = heartbeats[0]
                 latest_status = latest_heartbeat.get("status")
                 
-                if not isinstance(latest_status, int):
-                    log_message(f"[Uptime Kuma] Monitor '{monitor_id}' has non-integer status: {latest_status}")
-                    overall_status = "investigate"
-                    log_message(f"[Uptime Kuma] !! Problem state detected. Full heartbeat data: {latest_heartbeat}")
-                    break
-
+                # In Uptime Kuma, status 1 is "Up". Others (0=Down, 2=Pending) are problem states.
                 if latest_status != 1:
                     overall_status = "investigate"
                     log_message(f"[Uptime Kuma] !! Monitor '{monitor_id}' triggered 'investigate' state with status '{latest_status}'. Halting checks.")
@@ -1007,15 +1012,16 @@ def get_uptime_kuma_status():
         
         return jsonify({
             "enabled": True,
-            "status": overall_status
+            "status": overall_status,
+            "url": clean_uk_url
         })
 
     except requests.exceptions.RequestException as e:
         log_message(f"[Uptime Kuma] ERROR: Could not connect to Uptime Kuma. Details: {e}")
-        return jsonify({"enabled": True, "status": "error", "message": f"Could not connect to Uptime Kuma: {e}"}), 500
+        return jsonify({"enabled": True, "status": "error", "message": f"Could not connect to Uptime Kuma: {e}", "url": clean_uk_url}), 500
     except Exception as e:
         log_message(f"[Uptime Kuma] ERROR: An unexpected error occurred. Details: {e}")
-        return jsonify({"enabled": True, "status": "error", "message": f"An unexpected error occurred: {e}"}), 500
+        return jsonify({"enabled": True, "status": "error", "message": f"An unexpected error occurred: {e}", "url": clean_uk_url}), 500
 
 def main():
     """Main function to run initialization."""
