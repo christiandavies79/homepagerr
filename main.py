@@ -54,21 +54,25 @@ DEFAULT_HTML = """
             </div>
         </header>
         <main id="links-container">
-            </main>
+            <!-- Links will be dynamically loaded here -->
+        </main>
     </div>
 
+    <!-- Scratchpad Modal -->
     <div id="notepad-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Scratchpad</h2>
             <textarea id="notepad-textarea" placeholder="Type your notes here..."></textarea>
             <div class="modal-actions">
                 <button id="delete-all-notes-button" class="button-danger">Delete All</button>
-                <div style="flex-grow: 1;"></div> <button id="discard-notepad-button">Discard Changes</button>
+                <div style="flex-grow: 1;"></div> <!-- Spacer -->
+                <button id="discard-notepad-button">Discard Changes</button>
                 <button id="save-notepad-button">Save</button>
             </div>
         </div>
     </div>
 
+    <!-- Delete Confirmation Modal -->
     <div id="delete-confirm-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Delete All Notes?</h2>
@@ -82,12 +86,14 @@ DEFAULT_HTML = """
     </div>
 
 
+    <!-- Drag Overlay -->
     <div id="drag-overlay" class="hidden">
         <div class="drag-overlay-content">
             <h2>Drop Link Here</h2>
         </div>
     </div>
 
+    <!-- Add Link Modal (for drag & drop) -->
     <div id="add-link-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Add New Link</h2>
@@ -103,7 +109,8 @@ DEFAULT_HTML = """
                 <div class="form-group">
                     <label for="link-section-select">Section</label>
                     <select id="link-section-select">
-                        </select>
+                        <!-- Options will be populated by JS -->
+                    </select>
                 </div>
                 <div class="form-group hidden" id="new-section-group">
                     <label for="new-section-title-input">New Section Title</label>
@@ -118,6 +125,7 @@ DEFAULT_HTML = """
     </div>
 
 
+    <!-- Settings Modal -->
     <div id="settings-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Settings</h2>
@@ -748,20 +756,51 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (e.target.matches('.add-link-btn')) {
                 const linksUl = e.target.parentElement.querySelector('.links');
+                
+                // Create elements programmatically to ensure properties are set correctly
                 const newLinkLi = document.createElement('li');
                 newLinkLi.className = 'link-item';
-                newLinkLi.innerHTML = `
-                    <span class="drag-handle link-drag-handle">☰</span>
-                    <div class="link-item-content">
-                        <input type="text" placeholder="Name" class="link-name-input">
-                        <input type="text" placeholder="URL" class="link-url-input">
-                    </div>
-                    <button class="remove-btn remove-link-btn">X</button>`;
+
+                const dragHandle = document.createElement('span');
+                dragHandle.className = 'drag-handle link-drag-handle';
+                dragHandle.textContent = '☰';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'link-item-content';
+
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.placeholder = 'Name';
+                nameInput.className = 'link-name-input'; // Crucial for saving
+                
+                const urlInput = document.createElement('input');
+                urlInput.type = 'text';
+                urlInput.placeholder = 'URL';
+                urlInput.className = 'link-url-input'; // Crucial for saving
+
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-btn remove-link-btn';
+                removeBtn.textContent = 'X';
+
+                contentDiv.appendChild(nameInput);
+                contentDiv.appendChild(urlInput);
+                newLinkLi.appendChild(dragHandle);
+                newLinkLi.appendChild(contentDiv);
+                newLinkLi.appendChild(removeBtn);
+                
                 linksUl.appendChild(newLinkLi);
             }
             if(e.target.matches('.add-section-btn')) {
                  const newSectionDiv = document.createElement('div');
                  newSectionDiv.className = 'section';
+                 
+                 const newLinksUl = document.createElement('ul');
+                 newLinksUl.className = 'links';
+
+                 const addLinkBtn = document.createElement('button');
+                 addLinkBtn.textContent = 'Add Link';
+                 addLinkBtn.className = 'add-btn add-link-btn';
+
                  newSectionDiv.innerHTML = `
                     <div class="section-header">
                         <div class="section-header-title">
@@ -769,9 +808,11 @@ document.addEventListener('DOMContentLoaded', () => {
                            <input type="text" value="New Section" class="section-title-input">
                         </div>
                         <button class="remove-btn remove-section-btn">X</button>
-                    </div>
-                    <ul class="links"></ul>
-                    <button class="add-btn add-link-btn">Add Link</button>`;
+                    </div>`;
+                 
+                 newSectionDiv.appendChild(newLinksUl);
+                 newSectionDiv.appendChild(addLinkBtn);
+
                  linksContainer.insertBefore(newSectionDiv, e.target);
                  destroySortable();
                  initializeSortable();
