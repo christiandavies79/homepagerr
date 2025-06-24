@@ -54,25 +54,21 @@ DEFAULT_HTML = """
             </div>
         </header>
         <main id="links-container">
-            <!-- Links will be dynamically loaded here -->
-        </main>
+            </main>
     </div>
 
-    <!-- Scratchpad Modal -->
     <div id="notepad-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Scratchpad</h2>
             <textarea id="notepad-textarea" placeholder="Type your notes here..."></textarea>
             <div class="modal-actions">
                 <button id="delete-all-notes-button" class="button-danger">Delete All</button>
-                <div style="flex-grow: 1;"></div> <!-- Spacer -->
-                <button id="discard-notepad-button">Discard Changes</button>
+                <div style="flex-grow: 1;"></div> <button id="discard-notepad-button">Discard Changes</button>
                 <button id="save-notepad-button">Save</button>
             </div>
         </div>
     </div>
 
-    <!-- Delete Confirmation Modal -->
     <div id="delete-confirm-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Delete All Notes?</h2>
@@ -86,14 +82,12 @@ DEFAULT_HTML = """
     </div>
 
 
-    <!-- Drag Overlay -->
     <div id="drag-overlay" class="hidden">
         <div class="drag-overlay-content">
             <h2>Drop Link Here</h2>
         </div>
     </div>
 
-    <!-- Add Link Modal (for drag & drop) -->
     <div id="add-link-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Add New Link</h2>
@@ -109,8 +103,7 @@ DEFAULT_HTML = """
                 <div class="form-group">
                     <label for="link-section-select">Section</label>
                     <select id="link-section-select">
-                        <!-- Options will be populated by JS -->
-                    </select>
+                        </select>
                 </div>
                 <div class="form-group hidden" id="new-section-group">
                     <label for="new-section-title-input">New Section Title</label>
@@ -125,7 +118,6 @@ DEFAULT_HTML = """
     </div>
 
 
-    <!-- Settings Modal -->
     <div id="settings-modal" class="modal-overlay">
         <div class="modal-content">
             <h2>Settings</h2>
@@ -761,7 +753,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 newLinkLi.innerHTML = `
                     <span class="drag-handle link-drag-handle">☰</span>
                     <div class="link-item-content">
-                        <input type="text" placeholder="Name"><input type="text" placeholder="URL">
+                        <input type="text" placeholder="Name" class="link-name-input">
+                        <input type="text" placeholder="URL" class="link-url-input">
                     </div>
                     <button class="remove-btn remove-link-btn">X</button>`;
                 linksUl.appendChild(newLinkLi);
